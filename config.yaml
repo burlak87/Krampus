@@ -1,0 +1,17 @@
+storage_path: "./storage/storage.db"
+http_server:
+  address: "localhost:8082"
+  timeout: 4s
+  idle_timeout: 30s
+id_debug: true
+env: "local"
+listen: 
+  type: port
+  bind_ip: 0.0.0.0
+  port: 10000
+storage:
+  host: "db"
+  port: "5432"
+  database: "postgres"
+  username: "postgres"
+  password: "postgres"

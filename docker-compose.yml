@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:18-alpine
+    container_name: taskmanager_db
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5445:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql
+      - ./sql/schema/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  app:
+    build: .
+    container_name: taskmanager_app
+    ports:
+      - "8888:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      JWT_SECRET: my-secret-key
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: postgres
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      APP_PORT: "8080"
+      APP_ENV: local
+      LOG_LEVEL: debug
+      DOCKER_ENV: "true"
+    volumes:
+      - app_logs:/app/logs
+      - ./config.yaml:/config.yaml:ro
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  app_logs:

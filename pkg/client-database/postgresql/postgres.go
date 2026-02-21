@@ -7,8 +7,8 @@ import (
 	"log"
 	"time"
 
-	"github.com/your-team/taskmanager-chat/backend/pkg/config"
-	repeatable "github.com/your-team/taskmanager-chat/backend/pkg/utils"
+	"crampus/pkg/config"
+	repeatable "crampus/pkg/utils"
 
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5"

@@ -9,7 +9,7 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/your-team/taskmanager-chat/backend/internal/domain"
+	"crampus/internal/domain"
 
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
@@ -22,6 +22,7 @@ type UserStorage interface {
 	RefreshStore(userID int64, token string, expiresAt time.Time) error
 	RefreshGet(token string) (int64, error)
 	RefreshDelete(token string) error
+	RefreshDeleteByUserID(userID int64) error
 	UserBlocked(email string, windowStart time.Time) ([]map[string]interface{}, error)
 	LogAttempt(email string, result bool, attemptTime time.Time) error
 	GetFailedLogAttempts(email string, windowStart time.Time) (int, error)
@@ -155,6 +156,7 @@ func (s *User) UserLogin(user domain.User) (domain.TokenResponse, domain.TwoFaCo
         return domain.TokenResponse{}, domain.TwoFaCodes{}, errors.New("too many failed attempts, account blocked")
     }
 
+    // if dbUser.TwoFAEnabled {
     if dbUser.TwoFAEnabled != false {
         tempToken, err := s.GenerateTempToken(dbUser.ID)
         if err != nil {
@@ -181,7 +183,39 @@ func (s *User) UserLogin(user domain.User) (domain.TokenResponse, domain.TwoFaCo
     return domain.TokenResponse{AccessToken: accessToken, RefreshToken: refreshToken}, domain.TwoFaCodes{}, nil
 }
 
-func (s *User) StudentsRefresh(refreshToken string) (domain.TokenResponse, error) {
+func (s * User) UserLogout(userID int64, password string) error {
+    fmt.Printf("DEBUG LOGOUT: Searching user in database...\n")
+    dbUser, err := s.storage.SelectUserByID(userID)
+    if err != nil {
+        fmt.Printf("DEBUG LOGOUT: Database error or user not found: %v\n", err)
+        s.LogLoginAttempt(dbUser.Email, false)
+        return errors.New("invalid credentials")
+    }
+    
+    fmt.Printf("DEBUG LOGOUT: User found - ID: %d, Email: %s\n", dbUser.ID, dbUser.Email)
+    fmt.Printf("DEBUG LOGOUT: Stored password hash: %s\n", dbUser.PasswordHash)
+    fmt.Printf("DEBUG LOGOUT: Provided password: %s\n", dbUser.Password)
+    
+    fmt.Printf("DEBUG LOGOUT: Comparing passwords...\n")
+    err = bcrypt.CompareHashAndPassword([]byte(dbUser.PasswordHash), []byte(dbUser.Password))
+    if err != nil {
+        fmt.Printf("DEBUG LOGOUT: Password comparison failed: %v\n", err)
+        s.LogLoginAttempt(dbUser.Email, false)
+        return errors.New("invalid credentials")
+    }
+    
+    fmt.Printf("DEBUG LOGOUT: Password correct!\n")
+
+    err = s.storage.RefreshDeleteByUserID(userID)
+    if err != nil {
+    	return err
+    }
+    
+    fmt.Printf("DEBUG LOGOUT: User %d successful logged out\n", userID)
+	return nil
+}
+
+func (s *User) UserRefresh(refreshToken string) (domain.TokenResponse, error) {
 	userID, err := s.storage.RefreshGet(refreshToken)
 	if err != nil {
 		return  domain.TokenResponse{}, errors.New("Invalid refresh token")
@@ -453,12 +487,35 @@ func (s *User) extractUserIDFromToken(tokenString string) (int64, error) {
 	return int64(userIDFloat), nil
 }
 
-func (s *User) UserRefresh(refreshToken string) (domain.TokenResponse, error) {
-    // Обертка над StudentsRefresh
-    return s.StudentsRefresh(refreshToken)
+func (s *User) UserSendEmailCode(tempToken string) error {
+    // Обертка над UserSendEmailCode
+    return s.UserSendEmailCode(tempToken)
 }
 
-func (s *User) UserSendEmailCode(tempToken string) error {
-    // Обертка над StudentsSendEmailCode
-    return s.StudentsSendEmailCode(tempToken)
-}
+// func (s *User) startTokenCleanupService(interval time.Duration) {
+// 	ticker := time.NewTicker(internal)
+// 	defer ticker.Stop()
+	
+// 	for range ticker.C {
+// 		ctx := context.Background()
+// 		errRefresh := s.storage.DeleteExpiredRefreshTokens(ctx)
+// 		if errRefresh != nil {
+// 			log.Printf("Error cleaning expired tokens: %v", errRefresh)
+// 		}
+		
+// 		errAccess := s.storage.DeleteExpiredAccessTokens(ctx)
+// 		if errAccess != nil {
+// 			log.Printf("Error cleaning expired tokens: %v", errAccess)
+// 		}
+		
+// 		errTemp := s.storage.DeleteExpiredTempTokens(ctx)
+// 		if errTemp != nil {
+// 			log.Printf("Error cleaning expired tokens: %v", errTemp)
+// 		}
+		
+// 		errTwoFaCodes := s.storage.DeleteExpiredTwoFaCodes(ctx)
+// 		if errTwoFaCodes != nil {
+// 			log.Printf("Error cleaning expired codes: %v", errTwoFaCodes)
+// 		}
+// 	}
+// }

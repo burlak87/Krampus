@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/your-team/taskmanager-chat/backend/internal/domain"
-	"github.com/your-team/taskmanager-chat/backend/internal/storage/psql/sqlc"
+	"crampus/internal/domain"
+	"crampus/internal/storage/psql/sqlc"
 )
 
 type StorageError struct {
@@ -145,7 +145,7 @@ func (s *Storage) UserBlocked(email string, windowStart time.Time) ([]map[string
 	
 	return []map[string]interface{}{
 		{
-			"blocked_until": blockedUntil.Time,
+			"blocked_until": blockedUntil.Time, // Нет такого поля в структуре
 			"is_blocked": isBlocked,
 		},
 	}, nil

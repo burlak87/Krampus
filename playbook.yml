@@ -1,0 +1,37 @@
+---
+- name: Update system
+  hosts: localhost
+  become: yes
+  tasks:
+    - name: script
+      ansible.builtin.debug:
+        msg: "Приветствую вас твари! 😄"
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+    - name: Upgrade packages
+      apt:
+         upgrade: dist
+    - name: Install nginx
+      apt:
+        name: nginx
+        state: present
+        
+    - name: Start and enable nginx service
+      systemd:
+        name: nginx
+        state: started
+        enabled: yes
+    - name: Allow nginx port 80 through firewall
+      ufw:
+        rule: allow
+        port: '80'
+        proto: tcp
+    - name: Test nginx response
+      uri:
+        url: http://localhost
+        status_code: 200
+      register: curl_result
+    - name: Show curl result
+      ansible.builtin.debug:
+        msg: "Nginx готов! IP: $(curl -s ifconfig.me)"

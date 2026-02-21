@@ -1,0 +1,3 @@
+[webservers]
+localhost ansible_connection=local
+80.250.189.177 ansible_user=ubuntu

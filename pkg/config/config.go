@@ -3,7 +3,7 @@ package config
 import (
 	"sync"
 
-	"github.com/your-team/taskmanager-chat/backend/pkg/logging"
+	"crampus/pkg/logging"
 
 	"github.com/ilyakaznacheev/cleanenv"
 )

@@ -1,0 +1,23 @@
+# Database
+DB_HOST=localhost
+DB_PORT=5432
+DB_USER=postgres
+DB_PASSWORD=password
+DB_NAME=taskmanager
+
+# MongoDB
+MONGO_HOST=localhost
+MONGO_PORT=27017
+MONGO_USER=admin
+MONGO_PASSWORD=password
+
+# Redis
+REDIS_HOST=localhost
+REDIS_PORT=6379
+
+# JWT
+JWT_SECRET=your-super-secret-jwt-key-change-in-production
+
+# App
+PORT=8080
+NODE_ENV=development

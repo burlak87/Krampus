@@ -105,7 +105,7 @@ WHERE email = $1;
 -- name: UpdatePasswordHash :exec 
 UPDATE users 
 SET password_hash = $2
-WHERE id <= $1;
+WHERE id = $1;
 
 -- name: DeleteExpiredRefreshTokens :exec
 DELETE FROM refresh_tokens

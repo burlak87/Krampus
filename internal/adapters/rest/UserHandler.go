@@ -5,16 +5,16 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/your-team/taskmanager-chat/backend/internal/domain"
-	"github.com/your-team/taskmanager-chat/backend/pkg/apperror"
-	"github.com/your-team/taskmanager-chat/backend/pkg/logging"
+	"crampus/internal/domain"
+	"crampus/pkg/apperror"
+	"crampus/pkg/logging"
 )
 
 type UserService interface {
 	UserRegister(users domain.User) (domain.User, error)
 	UserLogin(users domain.User) (domain.TokenResponse, domain.TwoFaCodes, error)
-	UserLogout() (string, error)
-	SaveSession() ()
+	UserLogout(userID int64, password string) error
+	// SaveSession() ()
 	UserRefresh(token string) (domain.TokenResponse, error)
 	UserSendEmailCode(tempToken string) error
 	VerifyCode(code domain.Code) (domain.TokenResponse, error)
@@ -39,6 +39,7 @@ func (h *UsersHandler) RegisterRoutes(router *gin.RouterGroup, jwtSecret string)
 	{
 		auth.POST("/register", h.signUp)
 		auth.POST("/login", h.signIn)
+		auth.POST("/logout", h.logout)
 		auth.POST("/refresh", h.refresh)
 		auth.POST("/send-code", h.sendEmailToken)
 		auth.POST("/verify-code", h.verifyCode)
@@ -104,6 +105,38 @@ func (h *UsersHandler) signIn(c *gin.Context) {
 	}
 	
 	c.JSON(http.StatusOK, accessToken)
+}
+
+func (h *UsersHandler) logout(c *gin.Context) {
+	userID, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Unauthorized",
+		})
+		return
+	}
+	
+	var req domain.TwoFaToggleRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		h.logger.Error("Failed to bind JSON: " + err.Error())
+		c.JSON(http.StatusBadRequest, gin.H{
+				"error": "Invalid request body",
+		})
+		return
+	}
+	
+	err := h.service.UserLogout(userID.(int64), req.Password)
+	if err != nil {
+		h.logger.Error("Failed to logout: " + err.Error())
+		c.JSON(http.StatusBadRequest, gin.H{
+				"error": "Failed to logout",
+		})
+		return
+	}
+	
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+	})
 }
 
 func (h *UsersHandler) refresh(c *gin.Context) {

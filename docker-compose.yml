@@ -1,49 +1,319 @@
-version: '3.8'
+version: "3.8"
 
 services:
-  db:
-    image: postgres:18-alpine
-    container_name: taskmanager_db
+  postgres:
+    image: postgres:17-alpine
+    container_name: krampus_db_one
     environment:
-      POSTGRES_DB: postgres
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ${DB_NAME:-krampusdbone}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-password}
     ports:
       - "5445:5432"
     volumes:
-      - pgdata:/var/lib/postgresql
+      - postgres_data:/var/lib/postgresql/data
       - ./sql/schema/init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-krampusdbone}",
+        ]
+      timeout: 20s
+      retries: 10
       interval: 10s
-      timeout: 5s
-      retries: 5
+      start_period: 40s
     restart: unless-stopped
+    networks:
+      - krampus-net
 
-  app:
+  cassandra:
+    image: cassandra:4.1
+    container_name: krampus_db_two
+    ports:
+      - "9042:9042"
+      - "7000:7000"
+    environment:
+      CASSANDRA_CLUSTER_NAME: KrampusCluster
+      CASSANDRA_SEEDS: cassandra
+    volumes:
+      - cassandra_data:/var/lib/cassandra/data
+    healthcheck:
+      test: ["CMD", "nodetool", "status"]
+      timeout: 20s
+      retries: 10
+      interval: 10s
+      start_period: 40s
+    networks:
+      - krampus-net
+
+  mongodb:
+    image: mongo:7-jammy
+    container_name: krampus_db_three
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-password}
+    ports:
+      - "27018:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'echo ''db.runCommand("ping").ok'' | mongosh --quiet || exit 1',
+        ]
+      timeout: 20s
+      retries: 10
+      interval: 10s
+      start_period: 40s
+    restart: unless-stopped
+    networks:
+      - krampus-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: krampus_cache
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      timeout: 20s
+      retries: 10
+      interval: 10s
+      start_period: 40s
+    restart: unless-stopped
+    networks:
+      - krampus-net
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: krampus_zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "22181:2181"
+    volumes:
+      - zookeeper_data:/var/lib/zookeeper/data
+      - zookeeper_log:/var/lib/zookeeper/log
+    networks:
+      - krampus-net
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: krampus_kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    networks:
+      - krampus-net
+
+  backend:
     build: .
-    container_name: taskmanager_app
+    container_name: krampus_app
     ports:
       - "8888:8080"
     depends_on:
-      db:
+      postgres:
+        condition: service_healthy
+      cassandra:
+        condition: service_started
+      mongodb:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     environment:
-      JWT_SECRET: my-secret-key
-      DB_HOST: db
+      DB_HOST: postgres
       DB_PORT: 5432
-      DB_NAME: postgres
-      DB_USER: postgres
-      DB_PASSWORD: postgres
+      DB_NAME: ${DB_NAME:-krampusdbone}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-password}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JWT_SECRET: my-secret-key
       APP_PORT: "8080"
       APP_ENV: local
       LOG_LEVEL: debug
       DOCKER_ENV: "true"
+      MAIL_TRANSPORT: "SMTP"
+      MAIL_HOST: "smtp.gmail.com"
+      MAIL_PORT: "587"
+      MAIL_USER: "noobikcfb@gmail.com"
+      MAIL_PASSWORD: ${MAIL_PASSWORD}
+      MAIL_FROM: '"Мой Блог <noobikcfb@gmail.com>!"'
+      MAIL_FROM_NAME: "Мой Блог"
     volumes:
-      - app_logs:/app/logs
+      - ./backend:/app
+      - ./krampus_content:/var/lib/krampus/content
       - ./config.yaml:/config.yaml:ro
+      - app_custom_logs:/app/logs
     restart: unless-stopped
+    networks:
+      - krampus-net
+    command: go run cmd/app/main.go
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - API_URL: http://backend:8080
+    volumes:
+      - ./frontend:/app
+    depends_on:
+      backend:
+        condition: service_started
+    command: npm run dev
+    networks:
+      - krampus-net
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.0
+    container_name: krampus_elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false # dev, вкл в prod
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test:
+        ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+    networks:
+      - krampus-net
+
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.13.0
+    container_name: krampus_logstash
+    ports:
+      - "50000:50000"
+    volumes:
+      - ./logstash.conf:/usr/share/logstash/pipeline/logstash.conf:ro
+    depends_on:
+      - elasticsearch
+    networks:
+      - krampus-net
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.13.0
+    container_name: krampus_kibana
+    ports:
+      - "5601:5601"
+    environment:
+      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
+    depends_on:
+      - elasticsearch
+    networks:
+      - krampus-net
+
+  mimir:
+    image: grafana/mimir:latest
+    container_name: krampus_mimir
+    ports:
+      - "9009:9009"
+      - "8080:8080"
+    command:
+      - "-config.file=/etc/mimir.yaml"
+    volumes:
+      - ./mimir.yaml:/etc/mimir.yaml:ro
+      - mimir_data:/data
+    restart: unless-stopped
+    networks:
+      - krampus-net
+
+  loki:
+    image: grafana/loki:latest
+    container_name: krampus_loki
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - ./loki-config.yaml:/etc/loki/local-config.yaml:ro
+      - loki_data:/loki
+    restart: unless-stopped
+    networks:
+      - krampus-net
+
+  tempo:
+    image: grafana/tempo:latest
+    container_name: krampus_tempo
+    ports:
+      - "3200:3200"
+      - "4317:4317"
+      - "4318:4318"
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ./tempo.yaml:/etc/tempo.yaml:ro
+      - tempo_data:/tmp/tempo
+    restart: unless-stopped
+    networks:
+      - krampus-net
+
+  grafana:
+    image: grafana/grafana-enterprise:latest
+    container_name: krampus_grafana
+    ports:
+      - "3001:3000"
+    depends_on:
+      - mimir
+      - loki
+      - tempo
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-prodpass123}
+      - GF_AUTH_ANONYMOUS_ENABLED=false
+      - GF_AUTH_DISABLE_LOGIN_FORM=false
+      - GF_SERVER_ROOT_URL=http://localhost:3001
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana-provisioning:/etc/grafana/provisioning:ro
+    restart: unless-stopped
+    networks:
+      - krampus-net
+
+  promtail:
+    image: grafana/promtail:latest
+    container_name: krampus_promtail
+    volumes:
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - ./promtail-config.yaml:/etc/promtail/config.yml:ro
+    restart: unless-stopped
+    networks:
+      - krampus-net
+    depends_on:
+      - loki
 
 volumes:
-  pgdata:
-  app_logs:
+  postgres_data:
+  cassandra_data:
+  mongo_data:
+  redis_data:
+  app_custom_logs:
+  zookeeper_data:
+  zookeeper_log:
+  kafka_data:
+  es_data:
+  mimir_data:
+  loki_data:
+  tempo_data:
+  grafana_data:
+
+networks:
+  krampus-net:
+    driver: bridge

@@ -3,13 +3,13 @@ package config
 import (
 	"sync"
 
-	"crampus/pkg/logging"
+	"krampus/pkg/logging"
 
 	"github.com/ilyakaznacheev/cleanenv"
 )
 
 type Config struct {
-	Env           string `yml:"env" env-default:"development"`
+	Env string `yml:"env" env-default:"development"`
 	StorageConfig
 }
 
@@ -29,15 +29,15 @@ func GetConfig() *Config {
 		logger := logging.GetLogger()
 		logger.Info("read application configuration")
 		instance = &Config{}
-		
+
 		if err := cleanenv.ReadEnv(instance); err != nil {
 			logger.Errorf("Error reading env vars: %v", err)
 		}
-		
+
 		if err := cleanenv.ReadConfig("/config.yml", instance); err != nil {
 			logger.Warnf("Config file not found, using env vars: %v", err)
 		}
-		
+
 		logger.Infof("Database config: %s:%s", instance.Host, instance.Port)
 	})
 	return instance

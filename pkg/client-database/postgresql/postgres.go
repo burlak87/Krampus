@@ -7,11 +7,11 @@ import (
 	"log"
 	"time"
 
-	"crampus/pkg/config"
-	repeatable "crampus/pkg/utils"
+	"krampus/pkg/config"
+	repeatable "krampus/pkg/utils"
 
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -27,18 +27,18 @@ func NewClient(ctx context.Context, maxAttempts int, sc config.StorageConfig) (p
 	err = repeatable.DoWithTries(func() error {
 		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
-		
+
 		pool, err = pgxpool.New(ctx, dsn)
 		if err != nil {
 			return err
 		}
-		
+
 		return nil
 	}, maxAttempts, 5*time.Second)
-	
+
 	if err != nil {
 		log.Fatal("Error do with tries postgresql")
 	}
-	
+
 	return pool, nil
 }

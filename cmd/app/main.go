@@ -6,12 +6,12 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	
+
 	"crampus/internal/adapters/rest"
 	"crampus/internal/service"
 	"crampus/internal/storage/psql"
+	database "crampus/internal/storage/psql/sqlc"
 	"crampus/pkg/client-database/postgresql"
-	"crampus/internal/storage/psql/sqlc"
 	"crampus/pkg/config"
 	"crampus/pkg/logging"
 	"crampus/pkg/server"
@@ -27,32 +27,32 @@ func main() {
 	logging.Init()
 	logger := logging.GetLogger()
 	logger.Infoln("Starting application")
-	
+
 	cfg := config.GetConfig()
 	overrideConfigFromEnv(cfg)
 	logger.Infof("Environment: %s", cfg.Env)
 	logger.Infof("DB CONFIG: Host=%s, Port=%s, Database=%s, Username=%s", cfg.Host, cfg.Port, cfg.Database, cfg.Username)
-	
+
 	dsn := getDSN(cfg)
 	logger.Infof("Using DSN: %s", dsn)
-	
+
 	jwtSecret := getJWTSecret()
 	logger.Infof("JWT secret configured: %s", maskSecret(jwtSecret))
-	
+
 	postgresSQLClient, err := postgresql.NewClient(context.TODO(), 15, cfg.StorageConfig)
 	if err != nil {
 		logger.Fatalf("Failed to connect to database: %v", err)
 	}
 	defer postgresSQLClient.Close()
-	
+
 	queries := database.New(postgresSQLClient)
 	storage := psql.NewStorage(queries)
-	
+
 	userService := service.NewUser(storage, jwtSecret)
 	userHandler := rest.NewUsersHandler(userService, logger)
 
 	port := getPort()
-	
+
 	serverCfg := server.Config{
 		Port:         port,
 		Mode:         cfg.Env,
@@ -61,16 +61,16 @@ func main() {
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,
 	}
-	
+
 	srv := server.NewServer(serverCfg, logger.Logger)
-	
+
 	srv.RegisterRoutes(func(engine *gin.Engine) {
 		api := engine.Group("/api")
 		{
 			auth := api.Group("/auth")
 			userHandler.RegisterRoutes(auth, jwtSecret)
 		}
-		
+
 		engine.GET("/health", func(c *gin.Context) {
 			c.JSON(200, gin.H{
 				"status": "ok",
@@ -78,7 +78,7 @@ func main() {
 			})
 		})
 	})
-	
+
 	logger.Infof("Starting server on port %s", serverCfg.Port)
 	if err := srv.Start(); err != nil {
 		logger.Fatalf("Failed to start server: %v", err)

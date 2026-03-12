@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"krampus/internal/domain"
 	"krampus/internal/service/refreshToken"
+	"krampus/internal/storage/redis"
 	"math"
 	"regexp"
 	"time"
@@ -18,6 +19,7 @@ type UserStorage interface {
 	SelectUserByEmail(email string) (domain.User, error)
 	SelectUserByID(userID int64) (domain.User, error)
 	BlockUser(email, blockedUntil string) error
+	RedisSessionStorage() redis.SessionStorage
 }
 
 type LoginAttemptStorage interface {
@@ -30,6 +32,7 @@ type User struct {
 	userStorage         UserStorage
 	loginAttemptStorage LoginAttemptStorage
 	refreshTokenService *refreshToken.RefreshToken
+	redisStorage        *redis.SessionStorage
 	jwtSecret           string
 }
 
@@ -37,12 +40,14 @@ func NewUser(
 	user UserStorage,
 	loginAttempt LoginAttemptStorage,
 	refreshToken *refreshToken.RefreshToken,
+	redisStorage *redis.SessionStorage,
 	jwt string,
 ) *User {
 	return &User{
 		userStorage:         user,
 		loginAttemptStorage: loginAttempt,
 		refreshTokenService: refreshToken,
+		redisStorage:        redisStorage,
 		jwtSecret:           jwt,
 	}
 }
@@ -180,6 +185,22 @@ func (s *User) UserLogin(user domain.User) (domain.TokenResponse, domain.TwoFaCo
 		return domain.TokenResponse{}, domain.TwoFaCodes{}, err
 	}
 
+	session := domain.CachedSession{
+		UserID:       dbUser.ID,
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
+		CreatedAt:    time.Now(),
+		LastActivity: time.Now(),
+		ExpiresAt:    time.Now().Add(15 * time.Minute),
+	}
+
+	if err = s.redisStorage.SetAccessToken(accessToken, session); err != nil {
+		fmt.Printf("Cache set error: %v\n", err)
+	}
+	if err = s.redisStorage.SetSessionByUserID(dbUser.ID, session); err != nil {
+		fmt.Printf("Session cache error: %v\n", err)
+	}
+
 	s.LogLoginAttempt(user.Email, true)
 	fmt.Printf("DEBUG LOGIN: Login successful for user ID: %d\n", dbUser.ID)
 	return domain.TokenResponse{AccessToken: accessToken, RefreshToken: refreshToken}, domain.TwoFaCodes{}, nil
@@ -207,6 +228,10 @@ func (s *User) UserLogout(userID int64, password string) error {
 	}
 
 	fmt.Printf("DEBUG LOGOUT: Password correct!\n")
+
+	if err = s.redisStorage.DeleteSessionByUserID(userID); err != nil {
+		fmt.Printf("Redis session delete error: %v\n", err)
+	}
 
 	err = s.refreshTokenService.DeleteRefreshTokensByUserID(userID)
 	if err != nil {

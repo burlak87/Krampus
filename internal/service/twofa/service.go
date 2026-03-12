@@ -9,6 +9,7 @@ import (
 
 	"krampus/internal/domain"
 	"krampus/internal/service/refreshToken"
+	"krampus/internal/storage/redis"
 
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -26,13 +27,15 @@ type TwoFAStorage interface {
 type TwoFA struct {
 	twoFAStorage        TwoFAStorage
 	refreshTokenService *refreshToken.RefreshToken
+	redisStorage        *redis.SessionStorage
 	jwtSecret           string
 }
 
-func NewTwoFA(twoFA TwoFAStorage, refreshToken *refreshToken.RefreshToken, jwt string) *TwoFA {
+func NewTwoFA(twoFA TwoFAStorage, refreshToken *refreshToken.RefreshToken, redisStorage *redis.SessionStorage, jwt string) *TwoFA {
 	return &TwoFA{
 		twoFAStorage:        twoFA,
 		refreshTokenService: refreshToken,
+		redisStorage:        redisStorage,
 		jwtSecret:           jwt,
 	}
 }
@@ -42,9 +45,23 @@ func (s *TwoFA) EnableTwoFA(userID int64) error {
 }
 
 func (s *TwoFA) UsersSendEmailCode(tempToken string) error {
-	userID, err := s.extractUserIDFromToken(tempToken)
-	if err != nil {
-		return errors.New("Invalid temp token")
+	var userID int64
+
+	cachedTemp, err := s.redisStorage.GetTempToken(tempToken)
+	if err == nil && time.Now().Before(cachedTemp.ExpiresAt) {
+		userID = cachedTemp.UserID
+	} else {
+		userID, err = s.extractUserIDFromToken(tempToken)
+		if err != nil {
+			return errors.New("Invalid temp token")
+		}
+
+		tempTokenData := domain.CachedTempToken{
+			UserID:    userID,
+			CreatedAt: time.Now(),
+			ExpiresAt: time.Now().Add(10 * time.Minute),
+		}
+		s.redisStorage.SetTempToken(tempToken, tempTokenData)
 	}
 
 	fifteenMinutesAgo := time.Now().Add(-15 * time.Minute)

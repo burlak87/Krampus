@@ -12,6 +12,8 @@ type User struct {
 	PasswordHash string    `json:"-"`
 	CreatedAt    time.Time `json:"created_at"`
 	TwoFAEnabled bool      `json:"two_fa_enabled"`
+	// BlockedUntil
+	// FailedLogins
 }
 
 type TwoFaCodes struct {
@@ -25,7 +27,7 @@ type TwoFaCode struct {
 	Code      string    `json:"code"`
 	ExpiresAt time.Time `json:"expires_at"`
 	Attempts  int       `json:"attempts"`
-	IsUsed    bool      `json:"is_used"` 
+	IsUsed    bool      `json:"is_used"`
 	CreatedAt time.Time `json:"created_at"`
 }
 

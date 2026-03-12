@@ -39,7 +39,7 @@ Value Onject - это объект важный своим содержимым,
 
 Богатая доменная модель(DDD), Value Objects, Entity, Aggregate, DDD+System Design, DTO, Record, Domain.
 
-1.17 часы.
+2.30 часы.
 
 task file. golang ci ling
 

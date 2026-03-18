@@ -2,15 +2,29 @@ package apperror
 
 import "encoding/json"
 
+type ErrorCode string
+
+const (
+	ErrInvalidMessage ErrorCode = "INVALID_MESSAGE"
+	ErrUnauthorized   ErrorCode = "UNAUTHORIZED"
+	ErrRateLimit      ErrorCode = "RATE_LIMIT"
+	ErrRoomNotFound   ErrorCode = "ROOm_NOT_FOUND"
+	ErrUserNotFound   ErrorCode = "USER_NOT_FOUND"
+	ErrForbidden      ErrorCode = "FORBIDDEN"
+	ErrStorage        ErrorCode = "STORAGE_ERROR"
+	ErrConnection     ErrorCode = "CONNECTION_ERROR"
+)
+
 var (
 	ErrNotFound = NewAppError(nil, "not found", "", "US-000003")
+	ErrServer   = NewAppError(nil, "Server", "", "")
 )
 
 type AppError struct {
-	Err              error `json:"-"`
-	Message          string `json:"message,omitempty"`
-	DeveloperMessage string `json:"developer_message,omitempty"`
-	Code             string `json:"code,omitempty"`
+	Code             ErrorCode `json:"code,omitempty"`
+	Message          string    `json:"message,omitempty"`
+	DeveloperMessage string    `json:"developer_message,omitempty"`
+	Details          string    `json:"details,omitempty"`
 }
 
 func (e *AppError) Error() string {
@@ -41,3 +55,13 @@ func NewAppError(err error, message, developerMessage, code string) *AppError {
 func systemError(err error) *AppError {
 	return NewAppError(err, "internal system error", err.Error(), "US-000000")
 }
+
+// func (e *AppError) Error() string { return string(e.Code) + ": " + e.Message }
+
+// func New(code ErrorCode, msg string) *AppError {
+// 	return &AppError{Code: code, Message: msg}
+// }
+
+// func NewWithDetails(code ErrorCode, msg, details string) *AppError {
+// 	return &AppError{Code: code, Message: msg, Details: details}
+// }

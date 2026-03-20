@@ -1,10 +1,10 @@
 package config
 
 import (
-	"strconv"
+	// "strconv"
 	"sync"
-	"time"
-	"os"
+	// "time"
+	// "os"
 
 	"krampus/pkg/logging"
 
@@ -51,9 +51,9 @@ import (
 // 	cfg := &Config{
 // 		Env: getEnv("ENV", "development"),
 // 		HTTPPort: getEnv("HTTP_PORT", ":8080"),
-// 		GRPCPort: getEnv("GRPC_PORT", ":9090"), 
+// 		GRPCPort: getEnv("GRPC_PORT", ":9090"),
 // 		SSEPort: getEnv("SSE_PORT", ":8081"),
-// 		PostgresDSN: getEnv("POSTGRES_DSN", "postgres://user:pass@localhost/chatdb?sslmode=disable"), 
+// 		PostgresDSN: getEnv("POSTGRES_DSN", "postgres://user:pass@localhost/chatdb?sslmode=disable"),
 // 		File: FileConfig{
 // 			BasePath: getEnv("FILE_BASE_PATH", "./storage"),
 // 			SegmentSize: parseDuration(getEnv("FILE_SEGMENT_SIZE", "1h")),
@@ -61,17 +61,17 @@ import (
 // 			FlushTimeout: parseDuration(getEnv("FILE_FLUSH_TIMEOUT", "100ms")),
 // 		},
 // 	}
-	
+
 // 	cfg.Redis.Addr = getEnv("REDIS_ADDR", "localhost:6379")
 // 	cfg.Redis.Password = getEnv("REDIS_PASSWORD", "")
 // 	cfg.Redis.DB, _ = strconv.Atoi(getEnv("REDIS_DB", "0"))
-	
+
 // 	cfg.Kafka.Brokers = getEnvAsSlice("KAFKA_BROKERS", []string{"localhost:9092"})
 // 	cfg.Kafka.Topics.Incoming = getEnv("KAFKA_TOPICS_INCOMING", "incoming")
 // 	cfg.Kafka.Topics.Validated = getEnv("KAFKA_TOPICS_VALIDATED", "validated")
 // 	cfg.Kafka.Topics.Saved = getEnv("KAFKA_TOPICS_SAVED", "saved")
 // 	cfg.Kafka.Topics.Broadcast = getEnv("KAFKA_TOPICS_BROADCAST", "broadcast")
-	
+
 // 	return cfg, nil
 // }
 

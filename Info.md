@@ -72,7 +72,7 @@ krampus-messenger/
 │   ├── apperror/
 │   ├── server/          # server.go (Gin setup)
 │   └── client-database/ # postgresql
-└── go.mod  # Только один! require только внешние (gin, pgx, redis)-->
+└── go.mod  # Только один! require только внешние (gin, pgx, redis) -->
 
 cmd
 ├── app

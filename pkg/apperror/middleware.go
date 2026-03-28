@@ -2,13 +2,12 @@ package apperror
 
 import (
 	"context"
-	"errors"
+	"fmt"
 	"net/http"
 	"strings"
-	"fmt"
 
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
 )
 
 type appHandler func(w http.ResponseWriter, r *http.Request) error
@@ -24,51 +23,22 @@ func JWTMiddleware(jwtSecret string, next http.Handler) http.Handler {
 		}
 		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
 		fmt.Printf("DEBUG JWT MIDDLEWARE: Token: %s...\n", tokenString[:10])
-		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error)  {
+		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 			return []byte(jwtSecret), nil
 		})
 		if err != nil {
 			http.Error(w, "Invalid token", http.StatusUnauthorized)
-			return 
+			return
 		}
 		claims, ok := token.Claims.(jwt.MapClaims)
 		if !ok {
 			http.Error(w, "Invalid claims", http.StatusUnauthorized)
-			return 
+			return
 		}
 		studentID := int64(claims["user_id"].(float64))
 		ctx := context.WithValue(r.Context(), "studentID", studentID)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
-}
-
-func Middleware(h appHandler) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		var appErr *AppError
-		err := h(w, r)
-
-		if err != nil {
-			w.Header().Set("Content-Type", "application/json")
-
-			if errors.As(err, &appErr) {
-
-				if errors.Is(err, ErrNotFound) {
-					w.WriteHeader(http.StatusNotFound)
-					w.Write(ErrNotFound.Marshal())
-					return
-				}
-
-				err = err.(*AppError)
-				w.WriteHeader(http.StatusBadRequest)
-				w.Write(appErr.Marshal())
-				return 
-				
-			}
-
-			w.WriteHeader(http.StatusTeapot)
-			w.Write(systemError(err).Marshal())
-		}
-	}
 }
 
 func ErrorMiddleware() gin.HandlerFunc {
@@ -77,14 +47,26 @@ func ErrorMiddleware() gin.HandlerFunc {
 		if len(c.Errors) == 0 {
 			return
 		}
-		err := c.Errors.Last()
-		if appErr, ok := err.Err.(*AppError); ok {
+		lastErr := c.Errors.Last()
+		if appErr, ok := lastErr.Err.(*AppError); ok {
 			c.JSON(getHTTPStatus(appErr.Code), gin.H{
-				"error": appErr,
+				"error": gin.H{
+					"code":              appErr.Code,
+					"message":           appErr.Message,
+					"developer_message": appErr.DeveloperMessage,
+					"details":           appErr.Details,
+				},
 			})
+			c.Abort()
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": gin.H{
+				"code":    ErrInternal,
+				"message": "internal server error",
+			},
+		})
+		c.Abort()
 	}
 }
 
@@ -96,6 +78,12 @@ func getHTTPStatus(code ErrorCode) int {
 		return http.StatusForbidden
 	case ErrRateLimit:
 		return http.StatusTooManyRequests
+	case ErrRoomNotFound, ErrUserNotFound:
+		return http.StatusNotFound
+	case ErrValidation, ErrInvalidMessage, ErrPayloadTooLarge:
+		return http.StatusBadRequest
+	case ErrDuplicate:
+		return http.StatusConflict
 	default:
 		return http.StatusInternalServerError
 	}

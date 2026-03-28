@@ -22,7 +22,7 @@ func NewRoomService(s storage.RoomStorage, cache storage.RoomCache, UserClientSv
 }
 
 func (rs *RoomService) GetRoom(ctx context.Context, id string) (*domain.Room, error) {
-	if room := rs.cache.Getroom(ctx, id); room != nil {
+	if room := rs.cache.GetRoom(ctx, id); room != nil {
 		return room, nil
 	}
 

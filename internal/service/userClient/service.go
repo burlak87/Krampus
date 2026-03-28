@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"krampus/internal/domain"
-	"krampus/pkg/apperror"
+	"krampus/internal/storage"
 	"log"
 	"time"
 )
@@ -22,7 +22,7 @@ func NewUserClientService(s storage.UserClientStorage, c storage.UserClientCache
 }
 
 func (ucs *UserClientService) GetUser(ctx context.Context, id string) (*domain.User, error) {
-	if user := us.cache.GetUser(ctx, id); user != nil {
+	if user := ucs.cache.GetUser(ctx, id); user != nil {
 		return user, nil
 	}
 

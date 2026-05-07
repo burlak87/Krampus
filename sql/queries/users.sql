@@ -11,7 +11,7 @@ INSERT INTO users (
 ) RETURNING *;
 
 -- name: GetUserByEmail :one
-SELECT 
+SELECT
     id,
     username,
     firstname,
@@ -22,12 +22,12 @@ SELECT
     created_at,
     blocked_until,
     failed_attempts
-FROM users 
-WHERE email = $1 
+FROM users
+WHERE email = $1
 LIMIT 1;
 
 -- name: GetUserByID :one
-SELECT 
+SELECT
     id,
     username,
     firstname,
@@ -38,8 +38,8 @@ SELECT
     created_at,
     blocked_until,
     failed_attempts
-FROM users 
-WHERE id = $1 
+FROM users
+WHERE id = $1
 LIMIT 1;
 
 -- name: CreateRefreshToken :exec
@@ -47,16 +47,16 @@ INSERT INTO refresh_tokens (user_id, token, expires_at)
 VALUES ($1, $2, $3);
 
 -- name: GetRefreshToken :one
-SELECT user_id, expires_at FROM refresh_tokens 
-WHERE token = $1 
+SELECT user_id, expires_at FROM refresh_tokens
+WHERE token = $1
 LIMIT 1;
 
 -- name: DeleteRefreshToken :exec
-DELETE FROM refresh_tokens 
+DELETE FROM refresh_tokens
 WHERE token = $1;
 
 -- name: RefreshDeleteByUserI :exec
-DELETE FROM refresh_tokens 
+DELETE FROM refresh_tokens
 WHERE user_id = $1;
 
 -- name: CreateLoginAttempt :exec
@@ -65,9 +65,9 @@ VALUES ($1, $2, $3);
 
 -- name: GetRecentFailedAttempts :one
 SELECT COUNT(*) as count
-FROM login_attempts 
-WHERE email = $1 
-  AND success = false 
+FROM login_attempts
+WHERE email = $1
+  AND success = false
   AND attempted_at >= $2;
 
 -- name: GetBlockedStatus :one
@@ -81,29 +81,29 @@ SET two_fa_enabled = $2
 WHERE id = $1;
 
 -- name: GetFailedLogAttempts :one
-SELECT COUNT(*) as count 
-FROM login_attempts 
-WHERE email = $1 
-  AND success = false 
+SELECT COUNT(*) as count
+FROM login_attempts
+WHERE email = $1
+  AND success = false
   AND attempted_at >= $2;
-  
--- name: BlockUser :exec 
+
+-- name: BlockUser :exec
 UPDATE users
-SET 
+SET
     blocked_until = $2,
     failed_attempts = failed_attempts + 1,
     last_failed_attempt = CURRENT_TIMESTAMP
-WHERE email = $1;  
-
--- name: ResetFailedAttempts :exec 
-UPDATE users 
-SET 
-    failed_attempts = 0,
-    blocked_until = NULL 
 WHERE email = $1;
 
--- name: UpdatePasswordHash :exec 
-UPDATE users 
+-- name: ResetFailedAttempts :exec
+UPDATE users
+SET
+    failed_attempts = 0,
+    blocked_until = NULL
+WHERE email = $1;
+
+-- name: UpdatePasswordHash :exec
+UPDATE users
 SET password_hash = $2
 WHERE id = $1;
 
@@ -111,6 +111,20 @@ WHERE id = $1;
 DELETE FROM refresh_tokens
 WHERE expires_at <= CURRENT_TIMESTAMP;
 
--- name: RefreshDeleteByUserID :exec 
-DELETE FROM refresh_tokens 
+-- name: RefreshDeleteByUserID :exec
+DELETE FROM refresh_tokens
 WHERE user_id = $1;
+
+-- name: UpdateUserLastActive :exec
+UPDATE users
+SET updated_at = $2
+WHERE id = $1;
+
+-- name: CreateUserClient :exec
+INSERT INTO users (id, username, firstname, lastname, email, password_hash)
+VALUES ($1, $2, $3, $4, $5, $6);
+
+-- name: UpdateUserClient :exec
+UPDATE users
+SET username = $2, firstname = $3, lastname = $4, email = $5
+WHERE id = $1;

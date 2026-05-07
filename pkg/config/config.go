@@ -9,6 +9,7 @@ import (
 
 type Config struct {
 	Env         string
+	JWTSecret   string `env:"JWT_SECRET"`
 	HTTPPort    string `env:"HTTP_PORT" default:":8080"`
 	GRPCPort    string
 	SSEPort     string

@@ -52,3 +52,30 @@ CREATE INDEX idx_login_attempts_attempted_at ON login_attempts(attempted_at);
 
 -- Индекс для поиска по email и времени
 CREATE INDEX idx_login_attempts_email_time ON login_attempts(email, attempted_at);
+
+CREATE TABLE IF NOT EXISTS rooms (
+    id         TEXT PRIMARY KEY,
+    type       TEXT NOT NULL,
+    owner_id   TEXT NOT NULL,
+    name       TEXT NOT NULL,
+    members    JSONB NOT NULL, -- список ID участников
+    settings   JSONB NOT NULL, -- объект настроек
+    created_at BIGINT NOT NULL,
+    updated_at BIGINT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS messages (
+    id          TEXT PRIMARY KEY,
+    type        TEXT NOT NULL,
+    user_id     TEXT NOT NULL,
+    room_id     TEXT NOT NULL,
+    timestamp   BIGINT NOT NULL,
+    payload     JSONB NOT NULL,
+    signature   TEXT,
+    created_at  TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    expires_at  TIMESTAMP WITH TIME ZONE
+);
+
+-- Индексы (sqlc их не генерирует, но они нужны в БД)
+CREATE INDEX IF NOT EXISTS idx_messages_room_timestamp ON messages(room_id, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_messages_expires ON messages(expires_at) WHERE expires_at IS NOT NULL;

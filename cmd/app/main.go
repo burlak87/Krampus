@@ -6,103 +6,156 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/sirupsen/logrus"
 
-	"crampus/internal/adapters/rest"
-	"crampus/internal/service"
-	"crampus/internal/storage/psql"
-	database "crampus/internal/storage/psql/sqlc"
-	"crampus/pkg/client-database/postgresql"
-	"crampus/pkg/config"
-	"crampus/pkg/logging"
-	"crampus/pkg/server"
-)
-
-const (
-	envLocal = "local"
-	envDev   = "dev"
-	envProd  = "prod"
+	authRest "krampus/internal/auth/adapters"
+	authService "krampus/internal/auth/service"
+	authStorage "krampus/internal/auth/storage"
+	chatAdapters "krampus/internal/chat/adapters"
+	chatService "krampus/internal/chat/service"
+	chatStorage "krampus/internal/chat/storage"
+	messageAdapters "krampus/internal/message/adapters"
+	messageService "krampus/internal/message/service"
+	messageStorage "krampus/internal/message/storage"
+	sqlc "krampus/internal/sqlc"
+	userRest "krampus/internal/user/adapters"
+	userService "krampus/internal/user/service"
+	userStorage "krampus/internal/user/storage"
+	"krampus/pkg/apperror"
+	"krampus/pkg/client-database/postgresql"
+	redisClient "krampus/pkg/client-database/redis"
+	"krampus/pkg/config"
+	"krampus/pkg/logging"
+	"krampus/pkg/messaging/kafka"
+	"krampus/pkg/server"
 )
 
 func main() {
 	logging.Init()
 	logger := logging.GetLogger()
-	logger.Infoln("Starting application")
+	logger.Infoln("🚀 Starting Crampus Modular Monolith")
 
-	cfg := config.GetConfig()
-	overrideConfigFromEnv(cfg)
-	logger.Infof("Environment: %s", cfg.Env)
-	logger.Infof("DB CONFIG: Host=%s, Port=%s, Database=%s, Username=%s", cfg.Host, cfg.Port, cfg.Database, cfg.Username)
+	myLog := logrus.New()
 
-	dsn := getDSN(cfg)
-	logger.Infof("Using DSN: %s", dsn)
+	ctx := context.Background()
+	cfg, err := config.Load()
+	if err != nil {
+		logger.Fatalf("❌ Config load failed: %v", err)
+	}
+
+	pool, err := postgresql.NewClient(ctx, 15, *cfg)
+	if err != nil {
+		logger.Fatalf("❌ Postgres failed: %v", err)
+	}
+	defer pool.Close()
+	queries := sqlc.New(pool)
+
+	rdbWrapper, err := redisClient.New(redisClient.Config{
+		Addr:     cfg.Redis.Addr,
+		Password: cfg.Redis.Password,
+		DB:       cfg.Redis.DB,
+		PoolSize: 10,
+	})
+	if err != nil {
+		logger.Fatalf("Redis failed: %v", err)
+	}
+
+	// 3. Kafka (объединенная настройка)
+	kafkaCfg := config.KafkaConfig{
+		Brokers: cfg.Kafka.Brokers,
+		Topics:  cfg.Kafka.Topics,
+	}
+	msgDistributor := messageStorage.NewMessageDistributor(kafkaCfg, *logger)
+	kafkaConsumer, _ := kafka.NewConsumer(kafkaCfg, *logger)
 
 	jwtSecret := getJWTSecret()
-	logger.Infof("JWT secret configured: %s", maskSecret(jwtSecret))
 
-	postgresSQLClient, err := postgresql.NewClient(context.TODO(), 15, cfg.StorageConfig)
+	// 4. USER MODULE
+	laStorage := userStorage.NewLoginAttemptStorage(queries)
+	userPG := userStorage.NewUserStorage(queries)
+	userRedis := userStorage.NewRedisSessionStorage(rdbWrapper.RDB())
+	refreshStorage := userStorage.NewRefreshTokenStorage(queries)
+	twofaStorage := authStorage.NewStorage(queries)
+
+	refreshSvc := userService.NewRefreshToken(refreshStorage, jwtSecret)
+	userSvc := userService.NewUser(userPG, laStorage, refreshSvc, userRedis, jwtSecret)
+	twoFASvc := authService.NewTwoFA(twofaStorage, refreshSvc, userRedis, jwtSecret)
+	refreshHandler := userRest.NewRefreshTokenHandler(refreshSvc, logger)
+	userHandler := userRest.NewUserHandler(userSvc, logger)
+	twofaHandler := authRest.NewTwoFAHandler(twoFASvc, logger)
+
+	// 5. CHAT MODULE
+	userClientRedis := chatStorage.NewUserClientCache(rdbWrapper)
+	userClientStorage := chatStorage.NewUserClientPGStorage(queries)
+	userRoomRedis := chatStorage.NewRoomCache(rdbWrapper)
+	userRoomStorage := chatStorage.NewRoomPGStorage(queries)
+
+	userClientSvc := chatService.NewUserClientService(userClientStorage, userClientRedis)
+	roomSvc := chatService.NewRoomService(userRoomStorage, userRoomRedis, userClientSvc)
+
+	// 6. MESSAGE MODULE
+	_ = messageStorage.NewFileStorage(cfg.File.BasePath, cfg.File.SegmentSize, roomSvc)
+	// msgRedis, err := messageStorage.NewRedisStorage(cfg.Redis.Addr, cfg.Redis.Password, cfg.Redis.DB)
 	if err != nil {
-		logger.Fatalf("Failed to connect to database: %v", err)
+		logger.Fatalf("Failed to init message redis: %v", err)
 	}
-	defer postgresSQLClient.Close()
+	msgPG := messageStorage.NewMessagePGStorage(pool, queries)
+	msgSvc := messageService.NewMessageService(msgPG, msgDistributor, roomSvc, userClientSvc)
 
-	queries := database.New(postgresSQLClient)
-	storage := psql.NewStorage(queries)
+	// 7. HANDLERS
+	chatRouter := chatAdapters.NewRouter(userRedis, roomSvc, msgSvc, userClientSvc, cfg)
+	wsServer := messageAdapters.NewWebSocketServer(msgSvc, cfg, kafkaConsumer)
 
-	userService := service.NewUser(storage, jwtSecret)
-	userHandler := rest.NewUsersHandler(userService, logger)
+	// 8. SERVER
+	engine := gin.New()
+	engine.Use(gin.Recovery(), apperror.CORSMiddleware(), apperror.ErrorMiddleware())
 
-	port := getPort()
-
-	serverCfg := server.Config{
-		Port:         port,
-		Mode:         cfg.Env,
-		CorsOrigins:  []string{"*"},
-		CorsEnabled:  true,
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 10 * time.Second,
-	}
-
-	srv := server.NewServer(serverCfg, logger.Logger)
-
-	srv.RegisterRoutes(func(engine *gin.Engine) {
-		api := engine.Group("/api")
+	api := engine.Group("/api/v1")
+	{
+		auth := api.Group("/auth")
 		{
-			auth := api.Group("/auth")
-			userHandler.RegisterRoutes(auth, jwtSecret)
+			userHandler.RegisterRoutes(auth)
+			refreshHandler.RegisterRoutes(auth)
+			twofaHandler.RegisterRoutes(auth)
 		}
 
-		engine.GET("/health", func(c *gin.Context) {
-			c.JSON(200, gin.H{
-				"status": "ok",
-				"time":   time.Now().UTC(),
-			})
-		})
+		// Регистрация путей чата с защитой
+		chatGroup := api.Group("/chat")
+		chatGroup.Use(apperror.AuthMiddleware(*userRedis, jwtSecret))
+		chatRouter.RegisterRoutes(chatGroup)
+	}
+
+	// WebSocket путь
+	engine.GET("/ws", func(c *gin.Context) {
+		wsServer.HandleWebSocket(c.Writer, c.Request)
 	})
 
-	logger.Infof("Starting server on port %s", serverCfg.Port)
+	// Настройка и старт сервера
+	serverCfg := server.Config{
+		Port: cfg.HTTPPort,
+		Mode: cfg.Env,
+	}
+
+	srv := server.NewServer(serverCfg, myLog)
+
+	logger.Infof("Server starting on :%s", serverCfg.Port)
 	if err := srv.Start(); err != nil {
-		logger.Fatalf("Failed to start server: %v", err)
+		logger.Fatalf("Server failed: %v", err)
 	}
 }
 
+func healthHandler(c *gin.Context) {
+	c.JSON(200, gin.H{"status": "ok", "timestamp": time.Now().UTC()})
+}
+
+// Utils
 func overrideConfigFromEnv(cfg *config.Config) {
 	if env := os.Getenv("APP_ENV"); env != "" {
 		cfg.Env = env
 	}
-	if host := os.Getenv("DB_HOST"); host != "" {
-		cfg.Host = host
-	}
-	if port := os.Getenv("DB_PORT"); port != "" {
-		cfg.Port = port
-	}
-	if db := os.Getenv("DB_NAME"); db != "" {
-		cfg.Database = db
-	}
-	if user := os.Getenv("DB_USER"); user != "" {
-		cfg.Username = user
-	}
-	if pass := os.Getenv("DB_PASSWORD"); pass != "" {
-		cfg.Password = pass
+	// Если в окружении есть полная строка подключения
+	if dsn := os.Getenv("POSTGRES_DSN"); dsn != "" {
+		cfg.PostgresDSN = dsn
 	}
 }
 
@@ -110,23 +163,12 @@ func getJWTSecret() string {
 	if secret := os.Getenv("JWT_SECRET"); secret != "" {
 		return secret
 	}
-	return "my-secret-key"
-}
-
-func maskSecret(secret string) string {
-	if len(secret) <= 4 {
-		return "****"
-	}
-	return secret[:2] + "****" + secret[len(secret)-2:]
+	return "my-super-secret-key-change-in-prod"
 }
 
 func getPort() string {
-	if port := os.Getenv("APP_PORT"); port != "" {
-		return port
+	if p := os.Getenv("APP_PORT"); p != "" {
+		return p
 	}
-	return "8888"
-}
-
-func getDSN(cfg *config.Config) string {
-	return "postgresql://" + cfg.Username + ":" + cfg.Password + "@" + cfg.Host + ":" + cfg.Port + "/" + cfg.Database + "?sslmode=disable&pool_max_conns=20"
+	return "8080"
 }

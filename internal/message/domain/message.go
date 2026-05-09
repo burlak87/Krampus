@@ -3,6 +3,7 @@ package domain
 import (
 	"encoding/json"
 	"errors"
+	"krampus/pkg/types"
 	"time"
 
 	"github.com/google/uuid"
@@ -21,12 +22,13 @@ const (
 )
 
 type BaseMessage struct {
-	ID        string          `json:"id"`
+	ID        types.MessageID `json:"id"`
 	Type      MessageType     `json:"type"`
-	UserID    string          `json:"user_id"`
-	RoomID    string          `json:"room_id"`
+	UserID    types.UserID    `json:"user_id"`
+	RoomID    types.RoomID    `json:"room_id"`
 	Timestamp int64           `json:"timestamp"`
 	Version   int             `json:"verison"`
+	Metadata  Metadata        `json:"metadata"`
 	Payload   json.RawMessage `json:"payload"`
 	Signature string          `json:"signature"`
 }
@@ -51,10 +53,13 @@ type SystemPayload struct {
 }
 
 type Metadata struct {
-	Version     int               `json:"version"`
-	Compression string            `json:"compression,omitempty"`
-	Encryption  string            `json:"encryption,omitempty"`
-	Headers     map[string]string `json:"headers,omitempty"`
+	TraceID       string            `json:"trace_id,omitempty"`
+	RequestID     string            `json:"request_id,omitempty"`
+	CorrelationID string            `json:"correlation_id,omitempty"`
+	Version       int               `json:"version"`
+	Compression   string            `json:"compression,omitempty"`
+	Encryption    string            `json:"encryption,omitempty"`
+	Headers       map[string]string `json:"headers,omitempty"`
 }
 
 var ErrInvalidTimestamp = errors.New("invalid timestamp")
@@ -63,29 +68,36 @@ func (m *BaseMessage) Validate() error {
 	if m.ID == "" || m.UserID == "" || m.RoomID == "" {
 		return errors.New("missing required fields")
 	}
+
 	if m.Timestamp <= 0 {
 		return ErrInvalidTimestamp
 	}
+
 	if m.Timestamp > time.Now().Add(5*time.Minute).UnixNano() {
 		return ErrInvalidTimestamp
 	}
+
 	return nil
 }
 
 func (m *BaseMessage) SetTimestamp() {
 	m.Timestamp = time.Now().UnixNano()
-	m.ID = uuid.New().String()
+	m.ID = types.MessageID(
+		uuid.New().String(),
+	)
 }
 
-func NewTextMessage(userID, roomID, text string) *BaseMessage {
+func NewTextMessage(userID types.UserID, roomID types.RoomID, text string) *BaseMessage {
 	msg := &BaseMessage{
 		Type:    TypeText,
 		UserID:  userID,
 		RoomID:  roomID,
 		Version: 1,
 	}
+
 	payload, _ := json.Marshal(TextPayload{Text: text})
 	msg.Payload = payload
 	msg.SetTimestamp()
+
 	return msg
 }

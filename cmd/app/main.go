@@ -14,6 +14,7 @@ import (
 	chatAdapters "krampus/internal/chat/adapters"
 	chatService "krampus/internal/chat/service"
 	chatStorage "krampus/internal/chat/storage"
+	identityService "krampus/internal/identity/service"
 	messageAdapters "krampus/internal/message/adapters"
 	messageService "krampus/internal/message/service"
 	messageStorage "krampus/internal/message/storage"
@@ -102,9 +103,15 @@ func main() {
 	msgPG := messageStorage.NewMessagePGStorage(pool, queries)
 	msgSvc := messageService.NewMessageService(msgPG, msgDistributor, roomSvc, userClientSvc)
 
+	// WS AUTH
+
+	jwtSvc := identityService.NewJWTService(jwtSecret)
+
+	wsAuthSvc := identityService.NewWSAuthService(jwtSvc, userRedis, roomSvc)
+
 	// 7. HANDLERS
 	chatRouter := chatAdapters.NewRouter(userRedis, roomSvc, msgSvc, userClientSvc, cfg)
-	wsServer := messageAdapters.NewWebSocketServer(msgSvc, cfg, kafkaConsumer)
+	wsServer := messageAdapters.NewWebSocketServer(msgSvc, cfg, wsAuthSvc, logger)
 
 	// 8. SERVER
 	engine := gin.New()

@@ -114,3 +114,590 @@ email string
 token string
 type TokenType
 expiresIn DateTime
+
+🚀 KRAMPUS — ROADMAP ДО УРОВНЯ SENIOR / STAFF ENGINEERING
+1. ГЛАВНЫЕ ПРОБЛЕМЫ ТЕКУЩЕЙ АРХИТЕКТУРЫ
+
+Сейчас проект выглядит как: `Strong Mid-Level Realtime Backend`
+Чтобы поднять его до уровня: `Senior / Staff / Production-grade Distributed Platform`
+
+нужно решить 5 ключевых классов проблем:
+Категория	                  Статус
+Security	                  weak
+Reliability	                medium
+Observability	              missing
+Scalability	                medium
+Maintainability	            medium
+
+2. SENIOR/STAFF REFACTOR ROADMAP
+PHASE 1 — CRITICAL REFACTORING
+
+2.1 Убрать fake websocket auth
+Сейчас `if token != "valid"`
+Нужно
+JWT middleware для WS
+1. Parse JWT
+2. Validate signature
+3. Validate expiration
+4. Validate session
+5. Validate room membership
+
+2.2 Вынести authentication middleware
+Сейчас
+
+Логика auth размазана.
+Нужно:
+```
+pkg/auth/
+├── jwt/
+├── middleware/
+├── session/
+└── permissions/
+```
+
+2.3 Исправить inconsistent IDs
+Сейчас `string(user.ID)`
+Нужно
+Единый тип:
+```
+type UserID string
+type RoomID string
+type MessageID string
+```
+
+2.4 Ввести Context Propagation
+Сейчас
+
+Часть goroutine теряет context.
+
+Нужно
+```
+trace_id
+request_id
+user_id
+correlation_id
+```
+
+во всех слоях.
+
+2.5 Переписать async goroutines
+Сейчас
+```
+go save()
+go publish()
+```
+
+Проблемы:
+- 🚨 panic loss
+- 🚨 no retries
+- 🚨 no supervision
+- 🚨 race conditions
+
+Нужно
+Worker Pool `pkg/workerpool/`
+
+2.6 Ввести structured logging
+Сейчас `log.Printf(...)`
+Нужно
+```
+{
+  "level": "error",
+  "trace_id": "...",
+  "user_id": "...",
+  "room_id": "...",
+  "msg": "..."
+}
+```
+
+2.7 Удалить business logic из adapters
+Сейчас
+handlers partially contain logic.
+
+Нужно `adapters → only transport mapping`
+
+2.8 Ввести interfaces everywhere
+Сейчас `storage *RoomPGStorage`
+Нужно `storage RoomRepository`
+
+2.9 Ввести dependency injection
+Сейчас `Manual wiring в main.go.`
+
+Нужно
+```
+uber/fx
+google/wire
+```
+или собственный container.
+
+2.10 Разделить bounded contexts
+Сейчас `user/chat/message tightly coupled.`
+Нужно
+```
+identity
+realtime
+messaging
+presence
+media
+notification
+```
+
+PHASE 2 — RELIABILITY
+3.1 Outbox Pattern
+Сейчас `DB save и Kafka publish не атомарны.`
+
+Проблема
+```
+message saved
+BUT kafka failed
+```
+
+Нужно
+```
+DB Transaction
+ ↓
+Outbox table
+ ↓
+Reliable publisher
+```
+
+3.2 Delivery ACK System
+Нужно
+```
+sent
+delivered
+read
+failed
+```
+
+3.3 Retry System
+Нужно
+```
+retry queue
+exponential backoff
+DLQ
+```
+
+3.4 Idempotency
+Сейчас `duplicate messages possible.`
+Нужно
+```
+message_id uniqueness
+dedup cache
+```
+
+3.5 Distributed Rate Limiter
+Сейчас `in-memory limiter.`
+
+Проблема не работает при scaling.
+
+Нужно Redis token bucket.
+
+PHASE 3 — STORAGE REFACTOR
+4.1 Normalized Room Members
+Сейчас
+```
+members JSON
+```
+
+Нужно
+```
+room_members
+```
+
+4.2 Message Partitioning
+Нужно
+
+```
+Postgres partitions:
+- by month
+- by room shard
+
+4.3 Redis Cache Strategy
+Нужно
+```
+cache-aside
+write-through
+cache invalidation bus
+```
+
+4.4 FileStorage → Object Storage
+Нужно `S3 / MinIO`
+
+4.5 Search Index
+Нужно
+`OpenSearch / Elasticsearch`
+
+PHASE 4 — OBSERVABILITY
+5.1 OpenTelemetry
+Нужно
+```
+traces
+spans
+metrics
+```
+
+5.2 Prometheus Metrics
+Нужно
+```
+Metric
+ws_connections
+messages/sec
+kafka_latency
+db_latency
+```
+
+5.3 Grafana Dashboards
+Нужно
+```
+realtime traffic
+room activity
+kafka lag
+online users
+```
+
+5.4 Distributed Tracing
+Нужно
+`REST → Kafka → WS`
+
+PHASE 5 — REALTIME ENGINE
+6.1 WebSocket Hub Refactor
+Сейчас `sync.Map everywhere.`
+
+Нужно `Actor-like architecture.`
+
+6.2 Presence Engine
+Нужно
+```
+online
+away
+busy
+invisible
+mobile
+desktop
+```
+
+6.3 Session Recovery
+Нужно `resume websocket sessions`
+
+6.4 SSE Transport
+Нужно `fallback transport.`
+
+6.5 Event Stream
+Нужно `event sourcing light`
+
+PHASE 6 — STAFF-LEVEL ARCHITECTURE
+7.1 CQRS
+Нужно 
+```
+write model
+read model
+```
+
+7.2 Event Sourcing
+Нужно `events вместо state mutation.`
+
+7.3 Saga Orchestration
+Нужно для:
+```
+calls
+payments
+moderation
+notifications
+```
+
+7.4 Multi-region readiness
+Нужно `geo replication`
+
+7.5 Federation
+Нужно `cross-server chats.`
+
+3. ФУНКЦИИ ДЛЯ KRAMPUS CHAT
+CORE CHAT FEATURES
+1. Message Editing
+```
+edited_at
+edit_history
+```
+2. Message Delete
+```
+soft delete
+hard delete
+moderation delete
+```
+3. Read Receipts `seen by`
+4. Typing Indicators
+5. Replies / Threads
+6. Reactions `👍 ❤️ 🔥 👀`
+7. Pinned Messages
+8. Forward Messages
+9. Saved Messages `Telegram-like.`
+10. Drafts `REALTIME FEATURES`
+11. Presence System
+12. Voice Channels `Discord-like.`
+13. Screen Sharing
+14. Live Streaming
+15. Watch Together `YouTube/Twitch sync.`
+
+GROUP FEATURES
+16. Roles
+```owner
+admin
+moderator
+member
+guest```
+17. Permissions Matrix
+18. Invite Links
+19. Join Requests
+20. Group Verification
+
+AI FEATURES
+21. AI Moderation
+22. AI Summaries
+23. Semantic Search
+24. AI Assistant Bot
+25. Auto Translation
+
+ENTERPRISE FEATURES
+26. Audit Logs
+27. Retention Policies
+28. Compliance Mode
+29. DLP
+30. SSO/OAuth
+
+MEDIA FEATURES
+31. File Upload Service
+32. CDN Integration
+33. Image Compression
+34. Video Transcoding
+35. Voice Notes
+
+SECURITY FEATURES
+36. Device Management
+37. Session Management
+38. Login Alerts
+39. Encrypted Chats
+40. Secret Chats
+
+GAMING FEATURES
+41. Rich Presence
+42. Matchmaking Chat
+43. Party Voice Rooms
+44. Game Activity Status
+45. Overlay Integration
+
+SOCIAL FEATURES
+46. Stories
+47. Profiles
+48. Friend System
+49. Follow System
+50. Public Communities
+
+STAFF-LEVEL FEATURES
+51. Distributed Presence
+52. Realtime Analytics
+53. Hot Partition Protection
+54. Dynamic Sharding
+55. Adaptive Rate Limiting
+56. Intelligent Caching
+57. Predictive Prefetching
+58. Priority Messaging
+59. QoS Messaging
+60. Offline Sync Engine
+
+4. ИДЕАЛЬНАЯ ЦЕЛЕВАЯ АРХИТЕКТУРА KRAMPUS
+```Clients
+  ↓
+Gateway
+  ↓
+Realtime Engine
+  ↓
+Event Bus (Kafka)
+  ↓
+Messaging Core
+  ↓
+  Storage Layer```
+
+5. ИТОГ
+Сейчас Krampus:
+- хороший modular monolith
+- strong realtime prototype
+- mid+/senior-level foundation
+После roadmap:
+- distributed realtime platform
+- enterprise-grade messenger backend
+- Discord/Slack/Telegram-class architecture foundation
+- staff-level engineering system
+
+Вот что действительно ценного и нового можно вытащить из этих старых файлов для текущего Krampus — именно то, чего у тебя либо вообще нет, либо реализовано частично/слабо.
+
+🚨 1. ГЛАВНОЕ: ТВОЯ СТАРАЯ АРХИТЕКТУРА БЫЛА БОЛЕЕ STAFF-LEVEL
+
+Самое важное:
+год назад ты уже думал как:
+- highload engineer
+- distributed systems engineer
+- realtime architect
+
+В parse.md часть этих идей:
+- потерялась
+- не реализована
+- упростилась
+
+🧠 2. ЧТО НУЖНО ВЕРНУТЬ В KRAMPUS
+2.1 MESSAGE-CENTRIC DESIGN
+
+Это одно из лучших решений из старых файлов.
+Идея
+
+ВСЯ система строится вокруг:
+```
+type BaseMessage struct {
+    ID        string
+    Type      MessageType
+    RoomID    string
+    UserID    string
+    Timestamp time.Time
+    Payload   any
+}
+```
+
+Почему это очень важно
+
+Сейчас у тебя: `transport-centric architecture`
+Нужно: `message-centric architecture` 
+Что это дает
+```Единый pipeline
+REST
+WS
+SSE
+Kafka
+Storage
+→ работают с одной DTO
+```
+
+Это позволит:
+✅ retries
+✅ DLQ
+✅ batching
+✅ routing
+✅ versioning
+✅ event sourcing
+✅ analytics
+✅ replay
+
+2.2 SSE КАК ОСНОВНОЙ TRANSPORT
+
+Это было очень сильной идеей.
+Сейчас
+У тебя: `WebSocket-first`
+Нужно 
+```
+SSE-first
+WS-second
+```
+
+Почему SSE лучше
+SSE	                     WS
+дешевле	                 дороже
+проще scaling	           sticky sessions
+auto reconnect	         manual reconnect
+HTTP infra friendly	     stateful
+меньше RAM	             больше RAM
+
+Идеальная схема
+SSE Использовать для:
+- receiving messages
+- notifications
+- presence
+- room updates
+WebSocket Только для:
+- typing
+- voice
+- realtime collaboration
+- games
+- calls
+
+Это очень staff-level решение
+Discord/Slack-like systems делают похожее.
+
+2.3 SHARDED CONNECTION MANAGER
+Это ОЧЕНЬ важно. Сейчас У тебя:
+`sync.Map`
+
+Проблема После: `10k+ connections` получишь:
+```
+contention
+GC pressure
+lock bottlenecks
+```
+
+Нужно
+`64 shards`
+
+Архитектура
+```
+ConnectionManager
+    ↓
+Shards[64]
+    ↓
+User Connections
+```
+Это даст
+✅ меньше contention
+✅ better CPU cache locality
+✅ linear scaling
+✅ predictable latency
+
+Это production pattern Tinode / Discord-like.
+
+2.4 MULTI-DEVICE SESSION ENGINE
+
+Сейчас у тебя:
+1 user = 1 connection
+Нужно:
+1 user = N sessions
+Возможности
+mobile
+desktop
+browser
+tablet
+Что хранить
+type Session struct {
+    DeviceType string
+    LastSeen   time.Time
+    UserAgent  string
+    Geo        string
+}
+Это база для:
+
+✅ push notifications
+✅ session management
+✅ device logout
+✅ security alerts
+
+2.5 PRIORITY MESSAGE PIPELINE
+
+Очень хорошая идея.
+
+Сейчас
+
+Все сообщения одинаковые.
+
+Нужно
+Priority	Type
+HIGH	moderation/system
+NORMAL	text
+LOW	typing/read
+Поведение
+HIGH
+instant flush
+NORMAL
+batch by 50
+timeout 100ms
+LOW
+aggressive batching
+Это dramatically снизит:
+
+✅ disk IO
+✅ Kafka pressure
+✅ CPU usage

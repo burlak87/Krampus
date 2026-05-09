@@ -6,155 +6,362 @@ import (
 	"sync"
 
 	message "krampus/internal/message/domain"
+	"krampus/pkg/ctxmeta"
 	"krampus/pkg/messaging/kafka"
+	"krampus/pkg/types"
+
+	"github.com/gorilla/websocket"
 )
 
+const roomWorkers = 8
+
 type ConnectionManager struct {
-	users         sync.Map
-	rooms         sync.Map
-	userLocks     sync.Map
+	users sync.Map
+	rooms sync.Map
+
+	roomQueues sync.Map
+
 	kafkaConsumer *kafka.Consumer
 }
 
 type UserConnections struct {
-	mu     sync.RWMutex
-	conns  map[string]*Client
-	userID string
+	mu sync.RWMutex
+
+	conns map[string]*Client
 }
 
 type RoomSubscribers struct {
-	mu     sync.RWMutex
-	users  map[string]bool
-	roomID string
+	mu sync.RWMutex
+
+	users map[types.UserID]map[string]*Client
 }
 
-func NewConnectionManager(kafkaConsumer *kafka.Consumer) *ConnectionManager {
+func NewConnectionManager(
+	kafkaConsumer *kafka.Consumer,
+) *ConnectionManager {
+
 	m := &ConnectionManager{
 		kafkaConsumer: kafkaConsumer,
 	}
-	m.kafkaConsumer.AddHandler(func(msg *message.BaseMessage) {
-		m.BroadcastToRoom(msg.RoomID, msg)
-	})
 
-	go m.kafkaConsumer.Consume(context.Background())
+	for i := 0; i < roomWorkers; i++ {
+
+		queue := make(
+			chan *message.BaseMessage,
+			1024,
+		)
+
+		m.roomQueues.Store(i, queue)
+
+		go m.roomWorker(queue)
+	}
+
+	m.kafkaConsumer.AddHandler(
+		func(msg *message.BaseMessage) {
+
+			ctx := ctxmeta.WithMetadata(
+				context.Background(),
+				ctxmeta.Metadata{
+					TraceID:       msg.Metadata.TraceID,
+					RequestID:     msg.Metadata.RequestID,
+					CorrelationID: msg.Metadata.CorrelationID,
+					UserID:        msg.UserID.String(),
+				},
+			)
+
+			m.BroadcastToRoom(
+				ctx,
+				msg.RoomID,
+				msg,
+			)
+		},
+	)
+
+	go m.kafkaConsumer.Consume(
+		context.Background(),
+	)
 
 	return m
 }
 
-func (m *ConnectionManager) Register(client *Client) error {
-	userID, roomID := client.UserID, client.RoomID
+func (m *ConnectionManager) roomWorker(
+	queue chan *message.BaseMessage,
+) {
 
-	ucI, _ := m.users.LoadOrStore(userID, &UserConnections{
-		conns:  make(map[string]*Client),
-		userID: userID,
-	})
+	for msg := range queue {
+
+		ctx := ctxmeta.WithMetadata(
+			context.Background(),
+			ctxmeta.Metadata{
+				TraceID:       msg.Metadata.TraceID,
+				RequestID:     msg.Metadata.RequestID,
+				CorrelationID: msg.Metadata.CorrelationID,
+				UserID:        msg.UserID.String(),
+			},
+		)
+
+		m.broadcast(
+			ctx,
+			msg,
+		)
+	}
+}
+
+func (m *ConnectionManager) Register(
+	client *Client,
+) error {
+
+	userID := client.UserID
+	roomID := client.RoomID
+
+	ucI, _ := m.users.LoadOrStore(
+		userID,
+		&UserConnections{
+			conns: make(map[string]*Client),
+		},
+	)
+
 	uc := ucI.(*UserConnections)
-
-	lockI, _ := m.userLocks.LoadOrStore(userID, new(sync.Mutex))
-	userLock := lockI.(*sync.Mutex)
-	userLock.Lock()
-	defer userLock.Unlock()
 
 	uc.mu.Lock()
+
 	uc.conns[client.ConnID()] = client
+
 	uc.mu.Unlock()
 
-	m.subscribeToRoom(roomID, userID)
+	m.subscribeToRoom(
+		roomID,
+		userID,
+		client,
+	)
+
 	client.Start()
 
-	log.Printf("WS registered: %s@%s (%s)", userID, roomID, client.ConnID())
+	meta := ctxmeta.Extract(client.ctx)
+
+	log.Printf(
+		"client registered trace_id=%s user_id=%s room_id=%s",
+		meta.TraceID,
+		userID,
+		roomID,
+	)
+
 	return nil
 }
 
-func (m *ConnectionManager) Unregister(client *Client) {
-	userID, roomID := client.UserID, client.RoomID
+func (m *ConnectionManager) Unregister(
+	client *Client,
+) {
+
+	userID := client.UserID
+	roomID := client.RoomID
 
 	if ucI, ok := m.users.Load(userID); ok {
+
 		uc := ucI.(*UserConnections)
-		LockI, ok := m.userLocks.Load(userID)
-		if !ok {
-			return
-		}
-
-		userLock := LockI.(*sync.Mutex)
-
-		userLock.Lock()
-		defer userLock.Unlock()
 
 		uc.mu.Lock()
-		delete(uc.conns, client.ConnID())
+
+		delete(
+			uc.conns,
+			client.ConnID(),
+		)
+
+		isEmpty := len(uc.conns) == 0
+
 		uc.mu.Unlock()
 
-		if len(uc.conns) == 0 {
-			m.unsubscribeFromRoom(roomID, userID)
+		if isEmpty {
+
 			m.users.Delete(userID)
-			m.userLocks.Delete(userID)
 		}
 	}
+
+	m.unsubscribeFromRoom(
+		roomID,
+		userID,
+		client,
+	)
 }
 
-func (m *ConnectionManager) BroadcastToRoom(roomID string, msg *message.BaseMessage) error {
-	subsI, ok := m.rooms.Load(roomID)
-	if !ok {
-		return nil
+func (m *ConnectionManager) BroadcastToRoom(
+	ctx context.Context,
+	roomID types.RoomID,
+	msg *message.BaseMessage,
+) error {
+
+	workerID := hashRoom(
+		roomID.String(),
+	) % roomWorkers
+
+	queueI, _ := m.roomQueues.Load(workerID)
+
+	queue := queueI.(chan *message.BaseMessage)
+
+	select {
+
+	case queue <- msg:
+
+	default:
+
+		meta := ctxmeta.Extract(ctx)
+
+		log.Printf(
+			"room queue overflow trace_id=%s room_id=%s",
+			meta.TraceID,
+			roomID,
+		)
 	}
+
+	return nil
+}
+
+func (m *ConnectionManager) broadcast(
+	ctx context.Context,
+	msg *message.BaseMessage,
+) {
+
+	subsI, ok := m.rooms.Load(
+		msg.RoomID,
+	)
+
+	if !ok {
+		return
+	}
+
 	subs := subsI.(*RoomSubscribers)
+
 	subs.mu.RLock()
-	defer subs.mu.RUnlock()
 
-	var wg sync.WaitGroup
-	for userID := range subs.users {
-		wg.Add(1)
-		go func(targetUserID string) {
-			defer wg.Done()
-			m.SendToUser(targetUserID, msg)
-		}(userID)
-	}
-	wg.Wait()
+	clients := make(
+		[]*Client,
+		0,
+	)
 
-	return nil
-}
+	for _, userClients := range subs.users {
 
-func (m *ConnectionManager) SendToUser(userID string, msg *message.BaseMessage) error {
-	ucI, ok := m.users.Load(userID)
-	if !ok {
-		return nil
-	}
-	uc := ucI.(*UserConnections)
-	LockI, _ := m.userLocks.LoadOrStore(userID, new(sync.Mutex))
-	userLock := LockI.(*sync.Mutex)
+		for _, client := range userClients {
 
-	userLock.Lock()
-	uc.mu.RLock()
-	defer uc.mu.RUnlock()
-	defer userLock.Unlock()
-
-	for _, client := range uc.conns {
-		select {
-		case client.Send <- msg:
-		default:
-			log.Printf("Dropped msg for slow client: %s", client.ConnID())
+			clients = append(
+				clients,
+				client,
+			)
 		}
 	}
-	return nil
+
+	subs.mu.RUnlock()
+
+	meta := ctxmeta.Extract(ctx)
+
+	for _, client := range clients {
+
+		select {
+
+		case client.Send <- msg:
+
+		default:
+
+			log.Printf(
+				"slow client evicted trace_id=%s user_id=%s",
+				meta.TraceID,
+				client.UserID,
+			)
+
+			client.Close(
+				websocket.ClosePolicyViolation,
+				"slow consumer",
+			)
+		}
+	}
 }
 
-func (m *ConnectionManager) subscribeToRoom(roomID, userID string) {
-	subsI, _ := m.rooms.LoadOrStore(roomID, &RoomSubscribers{
-		users:  make(map[string]bool),
-		roomID: roomID,
-	})
+func (m *ConnectionManager) subscribeToRoom(
+	roomID types.RoomID,
+	userID types.UserID,
+	client *Client,
+) {
+
+	subsI, _ := m.rooms.LoadOrStore(
+		roomID,
+		&RoomSubscribers{
+			users: make(
+				map[types.UserID]map[string]*Client,
+			),
+		},
+	)
+
 	subs := subsI.(*RoomSubscribers)
+
 	subs.mu.Lock()
-	subs.users[userID] = true
+
+	if _, ok := subs.users[userID]; !ok {
+
+		subs.users[userID] = make(
+			map[string]*Client,
+		)
+	}
+
+	subs.users[userID][client.ConnID()] = client
+
 	subs.mu.Unlock()
 }
 
-func (m *ConnectionManager) unsubscribeFromRoom(roomID, userID string) {
-	if subsI, ok := m.rooms.Load(roomID); ok {
-		subs := subsI.(*RoomSubscribers)
-		subs.mu.Lock()
-		delete(subs.users, userID)
-		subs.mu.Unlock()
+func (m *ConnectionManager) unsubscribeFromRoom(
+	roomID types.RoomID,
+	userID types.UserID,
+	client *Client,
+) {
+
+	subsI, ok := m.rooms.Load(roomID)
+
+	if !ok {
+		return
 	}
+
+	subs := subsI.(*RoomSubscribers)
+
+	subs.mu.Lock()
+
+	if userClients, ok := subs.users[userID]; ok {
+
+		delete(
+			userClients,
+			client.ConnID(),
+		)
+
+		if len(userClients) == 0 {
+
+			delete(
+				subs.users,
+				userID,
+			)
+		}
+	}
+
+	empty := len(subs.users) == 0
+
+	subs.mu.Unlock()
+
+	if empty {
+
+		m.rooms.Delete(roomID)
+	}
+}
+
+func hashRoom(
+	roomID string,
+) int {
+
+	hash := 0
+
+	for _, ch := range roomID {
+
+		hash = int(ch) + ((hash << 5) - hash)
+	}
+
+	if hash < 0 {
+		hash = -hash
+	}
+
+	return hash
 }

@@ -4,37 +4,37 @@ import (
 	"context"
 	"fmt"
 	"krampus/internal/chat/domain"
-	"krampus/internal/chat/storage"
 	messageDomain "krampus/internal/message/domain"
 	userDomain "krampus/internal/user/domain"
+	"krampus/pkg/types"
 	"time"
 )
 
 type RoomStorage interface {
 	SaveRoom(ctx context.Context, room *domain.Room) error
 	GetRoom(ctx context.Context, id string) (*domain.Room, error)
-	// UpdateRoom(ctx context.Context, room *domain.Room) error
-	// DeleteRoom(ctx context.Context, id string) error
-	// ListUserRooms(ctx context.Context, userID string) ([]*domain.Room, error)
+	UpdateRoom(ctx context.Context, room *domain.Room) error
+	DeleteRoom(ctx context.Context, id string) error
+	ListUserRooms(ctx context.Context, userID string) ([]*domain.Room, error)
 }
 
 type RoomCache interface {
 	GetRoom(ctx context.Context, id string) (*domain.Room, error)
 	SetRoom(ctx context.Context, id string, room *domain.Room) error
-	// DeleteRoom(ctx context.Context, id string) error
+	DeleteRoom(ctx context.Context, id string) error
 }
 
 type RoomService struct {
-	storage       *storage.RoomPGStorage
-	cache         *storage.RoomCache
+	storage       RoomStorage
+	cache         RoomCache
 	userClientSvc *UserClientService
 }
 
-func NewRoomService(s *storage.RoomPGStorage, cache *storage.RoomCache, UserClientSvc *UserClientService) *RoomService {
+func NewRoomService(s RoomStorage, cache RoomCache, userClientSvc *UserClientService) *RoomService {
 	return &RoomService{
 		storage:       s,
 		cache:         cache,
-		userClientSvc: UserClientSvc,
+		userClientSvc: userClientSvc,
 	}
 }
 
@@ -53,16 +53,24 @@ func (rs *RoomService) GetRoom(ctx context.Context, id string) (*domain.Room, er
 	return room, nil
 }
 
-func (rs *RoomService) CanSendMessage(ctx context.Context, room *domain.Room, user *userDomain.User, msgType messageDomain.MessageType) bool {
-	userIDStr := fmt.Sprintf("%d", user.ID)
+func (rs *RoomService) IsRoomMember(ctx context.Context, roomID, userID string) (bool, error) {
+	room, err := rs.GetRoom(ctx, roomID)
+	if err != nil {
+		return false, err
+	}
 
-	if !rs.isRoomMember(room, userIDStr) {
+	return rs.isRoomMember(room, userID), nil
+}
+
+func (rs *RoomService) CanSendMessage(ctx context.Context, room *domain.Room, user *userDomain.User, msgType messageDomain.MessageType) bool {
+	userID := types.UserIDFromInt64(user.ID).String()
+	if !rs.isRoomMember(room, userID) {
 		return msgType == messageDomain.TypeSystem
 	}
 
 	switch room.Type {
 	case domain.RoomPersonal:
-		return room.OwnerID == userIDStr
+		return room.OwnerID == userID
 	case domain.RoomPrivate:
 		return true
 	case domain.RoomGroup:
@@ -74,11 +82,9 @@ func (rs *RoomService) CanSendMessage(ctx context.Context, room *domain.Room, us
 	if room.Settings.ReadOnly && msgType != messageDomain.TypeSystem {
 		return false
 	}
-
 	if !room.Settings.AllowFiles && msgType == messageDomain.TypeFile {
 		return false
 	}
-
 	return true
 }
 

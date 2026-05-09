@@ -3,8 +3,10 @@ package storage
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"krampus/internal/user/domain"
+	"strconv"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -110,6 +112,24 @@ func (s *RedisSessionStorage) GetTempToken(token string) (domain.CachedTempToken
 	}
 
 	return tempToken, nil
+}
+
+func (r *RedisSessionStorage) ValidateSession(ctx context.Context, sessionID string, userID string) error {
+	session, err := r.GetAccessToken(sessionID)
+
+	if err != nil {
+		return err
+	}
+
+	if session.UserID == 0 {
+		return errors.New("session not found")
+	}
+
+	if strconv.FormatInt(session.UserID, 10) != userID {
+		return errors.New("invalid session owner")
+	}
+
+	return nil
 }
 
 func (s *RedisSessionStorage) RedisSessionStorage() {

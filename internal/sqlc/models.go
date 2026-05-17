@@ -29,6 +29,54 @@ type Message struct {
 	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
 }
 
+type MessageDeduplication struct {
+	IdempotencyKey string           `json:"idempotency_key"`
+	MessageID      string           `json:"message_id"`
+	CreatedAt      pgtype.Timestamp `json:"created_at"`
+}
+
+type MessageDeliveryStatus struct {
+	MessageID   string           `json:"message_id"`
+	UserID      string           `json:"user_id"`
+	Status      string           `json:"status"`
+	DeliveredAt pgtype.Timestamp `json:"delivered_at"`
+	ReadAt      pgtype.Timestamp `json:"read_at"`
+	UpdatedAt   pgtype.Timestamp `json:"updated_at"`
+}
+
+type MessageDlq struct {
+	ID        pgtype.UUID      `json:"id"`
+	MessageID string           `json:"message_id"`
+	UserID    string           `json:"user_id"`
+	RoomID    string           `json:"room_id"`
+	Payload   []byte           `json:"payload"`
+	Reason    string           `json:"reason"`
+	FailedAt  pgtype.Timestamp `json:"failed_at"`
+}
+
+type MessageRetryQueue struct {
+	ID          pgtype.UUID      `json:"id"`
+	MessageID   string           `json:"message_id"`
+	UserID      string           `json:"user_id"`
+	RoomID      string           `json:"room_id"`
+	Payload     []byte           `json:"payload"`
+	Attempt     int32            `json:"attempt"`
+	NextRetryAt pgtype.Timestamp `json:"next_retry_at"`
+	CreatedAt   pgtype.Timestamp `json:"created_at"`
+}
+
+type OutboxEvent struct {
+	ID            pgtype.UUID      `json:"id"`
+	AggregateType string           `json:"aggregate_type"`
+	AggregateID   string           `json:"aggregate_id"`
+	EventType     string           `json:"event_type"`
+	Payload       []byte           `json:"payload"`
+	CreatedAt     pgtype.Timestamp `json:"created_at"`
+	PublishedAt   pgtype.Timestamp `json:"published_at"`
+	RetryCount    int32            `json:"retry_count"`
+	LastError     pgtype.Text      `json:"last_error"`
+}
+
 type RefreshToken struct {
 	ID        int64              `json:"id"`
 	UserID    int64              `json:"user_id"`

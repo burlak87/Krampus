@@ -6,14 +6,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
+	"sync"
+	"time"
+
 	message "krampus/internal/message/domain"
 	"krampus/internal/message/service"
 	"krampus/pkg/apperror"
 	"krampus/pkg/ctxmeta"
 	"krampus/pkg/types"
-	"log"
-	"sync"
-	"time"
 
 	"github.com/gorilla/websocket"
 	"golang.org/x/time/rate"
@@ -27,24 +28,17 @@ const (
 )
 
 type Client struct {
-	ctx    context.Context
-	cancel context.CancelFunc
-
-	meta ctxmeta.Metadata
-
-	conn *websocket.Conn
-
-	UserID types.UserID
-	RoomID types.RoomID
-
-	Send chan *message.BaseMessage
-
-	msgSvc *service.MessageService
-	mgr    *ConnectionManager
-
+	ctx       context.Context
+	cancel    context.CancelFunc
+	meta      ctxmeta.Metadata
+	conn      *websocket.Conn
+	UserID    types.UserID
+	RoomID    types.RoomID
+	Send      chan *message.BaseMessage
+	msgSvc    *service.MessageService
+	mgr       *ConnectionManager
 	closeOnce sync.Once
-
-	limiter *rate.Limiter
+	limiter   *rate.Limiter
 }
 
 func NewClient(
@@ -59,42 +53,30 @@ func NewClient(
 ) *Client {
 
 	conn.EnableWriteCompression(true)
-
-	conn.SetCompressionLevel(
-		flate.BestSpeed,
-	)
+	conn.SetCompressionLevel(flate.BestSpeed)
 
 	return &Client{
-		ctx:    ctx,
-		cancel: cancel,
-
-		meta: meta,
-
-		conn: conn,
-
-		UserID: userID,
-		RoomID: roomID,
-
-		Send: make(chan *message.BaseMessage, 256),
-
-		msgSvc: svc,
-		mgr:    mgr,
-
-		limiter: rate.NewLimiter(
-			20,
-			40,
-		),
+		ctx:     ctx,
+		cancel:  cancel,
+		meta:    meta,
+		conn:    conn,
+		UserID:  userID,
+		RoomID:  roomID,
+		Send:    make(chan *message.BaseMessage, 256),
+		msgSvc:  svc,
+		mgr:     mgr,
+		limiter: rate.NewLimiter(20, 40),
 	}
 }
 
 func (c *Client) ConnID() string {
-	return c.conn.RemoteAddr().String() + "-" + c.UserID.String()
+	return c.conn.RemoteAddr().String() +
+		"-" +
+		c.UserID.String()
 }
 
 func (c *Client) Start() {
-
 	c.safeGo(c.readPump)
-
 	c.safeGo(c.writePump)
 }
 
@@ -135,8 +117,6 @@ func (c *Client) Close(
 
 		c.cancel()
 
-		close(c.Send)
-
 		c.conn.WriteControl(
 			websocket.CloseMessage,
 			websocket.FormatCloseMessage(
@@ -164,20 +144,24 @@ func (c *Client) readPump() {
 		"connection closed",
 	)
 
-	c.conn.SetReadLimit(maxMessageSize)
+	c.conn.SetReadLimit(
+		maxMessageSize,
+	)
 
 	c.conn.SetReadDeadline(
 		time.Now().Add(pongWait),
 	)
 
-	c.conn.SetPongHandler(func(string) error {
+	c.conn.SetPongHandler(
+		func(string) error {
 
-		c.conn.SetReadDeadline(
-			time.Now().Add(pongWait),
-		)
+			c.conn.SetReadDeadline(
+				time.Now().Add(pongWait),
+			)
 
-		return nil
-	})
+			return nil
+		},
+	)
 
 	for {
 
@@ -210,7 +194,6 @@ func (c *Client) readPump() {
 		_, payload, err := c.conn.ReadMessage()
 
 		if err != nil {
-
 			return
 		}
 
@@ -223,6 +206,42 @@ func (c *Client) readPump() {
 		var msg message.BaseMessage
 
 		if err := decoder.Decode(&msg); err != nil {
+			continue
+		}
+
+		if msg.Type == message.TypeAckDelivered ||
+			msg.Type == message.TypeAckRead {
+
+			var ack message.AckPayload
+
+			if err := json.Unmarshal(msg.Payload, &ack); err != nil {
+				continue
+			}
+
+			if msg.Type == message.TypeAckDelivered {
+				ack.Status = message.DeliveryDelivered
+			}
+
+			if msg.Type == message.TypeAckRead {
+				ack.Status = message.DeliveryRead
+			}
+
+			err := c.mgr.HandleAck(
+				ctx,
+				c.UserID,
+				ack,
+			)
+
+			if err != nil {
+
+				log.Printf(
+					"ack handle failed trace_id=%s user_id=%s err=%v",
+					c.meta.TraceID,
+					c.UserID,
+					err,
+				)
+			}
+
 			continue
 		}
 
@@ -239,6 +258,28 @@ func (c *Client) readPump() {
 			continue
 		}
 
+		if msg.Type.IsRealtimeOnly() {
+
+			err := c.mgr.broadcastRealtime(
+				ctx,
+				&msg,
+			)
+
+			if err != nil {
+
+				meta := ctxmeta.Extract(ctx)
+
+				log.Printf(
+					"realtime broadcast failed trace_id=%s user_id=%s err=%v",
+					meta.TraceID,
+					meta.UserID,
+					err,
+				)
+			}
+
+			continue
+		}
+
 		if err := c.msgSvc.Process(
 			ctx,
 			&msg,
@@ -252,15 +293,7 @@ func (c *Client) readPump() {
 				meta.UserID,
 				err,
 			)
-
-			continue
 		}
-
-		c.mgr.BroadcastToRoom(
-			ctx,
-			c.RoomID,
-			&msg,
-		)
 	}
 }
 
@@ -271,7 +304,9 @@ func (c *Client) writePump() {
 		c.meta,
 	)
 
-	ticker := time.NewTicker(pingPeriod)
+	ticker := time.NewTicker(
+		pingPeriod,
+	)
 
 	defer func() {
 
@@ -361,15 +396,60 @@ func (c *Client) SendError(
 		),
 	}
 
-	select {
+	event, err := BuildEvent(
+		time.Now().UnixNano(),
+		msg,
+	)
 
-	case c.Send <- msg:
+	if err != nil {
+		return
+	}
 
-	default:
+	if err := c.SafeSend(event); err != nil {
 
 		c.Close(
 			websocket.ClosePolicyViolation,
 			"slow consumer",
 		)
 	}
+}
+
+func (c *Client) SafeSend(
+	event *message.Event,
+) error {
+
+	baseMsg := &message.BaseMessage{}
+
+	err := json.Unmarshal(
+		event.Payload,
+		baseMsg,
+	)
+
+	if err != nil {
+		return err
+	}
+
+	select {
+
+	case <-c.ctx.Done():
+		return context.Canceled
+
+	case c.Send <- baseMsg:
+		return nil
+
+	default:
+		return ErrSlowConsumer
+	}
+}
+
+func (c *Client) GetUserID() types.UserID {
+	return c.UserID
+}
+
+func (c *Client) GetRoomID() types.RoomID {
+	return c.RoomID
+}
+
+func (c *Client) Transport() TransportKind {
+	return TransportWebSocket
 }

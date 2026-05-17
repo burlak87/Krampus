@@ -9,6 +9,7 @@ import (
 	"krampus/internal/message/domain"
 	"krampus/pkg/config"
 	"krampus/pkg/logging"
+	"krampus/pkg/types"
 
 	"github.com/confluentinc/confluent-kafka-go/kafka"
 )
@@ -78,10 +79,10 @@ func (c *Consumer) Consume(ctx context.Context) {
 			}
 
 			msgObj := &domain.BaseMessage{
-				ID:        event.ID,
+				ID:        types.MessageID(event.ID),
 				Type:      domain.MessageType(event.Type),
-				UserID:    event.UserID,
-				RoomID:    event.RoomID,
+				UserID:    types.UserID(event.UserID),
+				RoomID:    types.RoomID(event.RoomID),
 				Timestamp: event.Timestamp,
 				Payload:   event.Payload,
 			}

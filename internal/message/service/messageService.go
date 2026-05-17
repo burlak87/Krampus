@@ -2,12 +2,16 @@ package service
 
 import (
 	"context"
+	"encoding/json"
+	"log"
+
 	chat "krampus/internal/chat/service"
 	message "krampus/internal/message/domain"
 	messageStorage "krampus/internal/message/storage"
 	"krampus/pkg/apperror"
-	"log"
-	"time"
+	"krampus/pkg/types"
+
+	"github.com/google/uuid"
 )
 
 type MessageStorage interface {
@@ -23,21 +27,30 @@ type MessageDistributor interface {
 	SendToUserClient(ctx context.Context, userID string, msg *message.BaseMessage) error
 }
 
-type MessageService struct {
-	storage       *messageStorage.MessagePGStorage
-	distributor   *messageStorage.MessageDistributor
-	roomSvc       *chat.RoomService
-	userClientSvc *chat.UserClientService
-	rateLimiter   *RateLimiter
+type IdempotencyRepository interface {
+	IsDuplicate(ctx context.Context, key string) (bool, error)
+	Save(ctx context.Context, key string, messageID string) error
 }
 
-func NewMessageService(storage *messageStorage.MessagePGStorage, dist *messageStorage.MessageDistributor, roomSvc *chat.RoomService, userClientSvc *chat.UserClientService) *MessageService {
+type MessageService struct {
+	storage         *messageStorage.MessagePGStorage
+	distributor     *messageStorage.MessageDistributor
+	roomSvc         *chat.RoomService
+	userClientSvc   *chat.UserClientService
+	rateLimiter     *RateLimiter
+	outboxRepo      OutboxRepository
+	idempotencyRepo IdempotencyRepository
+}
+
+func NewMessageService(storage *messageStorage.MessagePGStorage, dist *messageStorage.MessageDistributor, roomSvc *chat.RoomService, userClientSvc *chat.UserClientService, outboxRepo OutboxRepository, idempotencyRepo IdempotencyRepository) *MessageService {
 	return &MessageService{
-		storage:       storage,
-		distributor:   dist,
-		roomSvc:       roomSvc,
-		userClientSvc: userClientSvc,
-		rateLimiter:   NewRateLimiter(),
+		storage:         storage,
+		distributor:     dist,
+		roomSvc:         roomSvc,
+		userClientSvc:   userClientSvc,
+		rateLimiter:     NewRateLimiter(),
+		outboxRepo:      outboxRepo,
+		idempotencyRepo: idempotencyRepo,
 	}
 }
 
@@ -49,16 +62,16 @@ func (ms *MessageService) Process(ctx context.Context, msg *message.BaseMessage)
 		return apperror.New(apperror.ErrInvalidMessage, err.Error())
 	}
 
-	if err := ms.rateLimiter.Check(ctx, msg.UserID, msg.Type); err != nil {
+	if err := ms.rateLimiter.Check(ctx, msg.UserID.String(), msg.Type); err != nil {
 		return err
 	}
 
-	user, err := ms.userClientSvc.GetUser(ctx, msg.UserID)
+	user, err := ms.userClientSvc.GetUser(ctx, msg.UserID.String())
 	if err != nil {
 		return apperror.New(apperror.ErrUserNotFound, "user client not found")
 	}
 
-	room, err := ms.roomSvc.GetRoom(ctx, msg.RoomID)
+	room, err := ms.roomSvc.GetRoom(ctx, msg.RoomID.String())
 	if err != nil {
 		return apperror.New(apperror.ErrRoomNotFound, "room not found")
 	}
@@ -66,23 +79,61 @@ func (ms *MessageService) Process(ctx context.Context, msg *message.BaseMessage)
 		return apperror.New(apperror.ErrForbidden, "no permission to send")
 	}
 
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if err := ms.storage.SaveMessage(ctx, msg); err != nil {
-			log.Printf("Failed to save message %s: %v", msg.ID, err)
-		}
-	}()
+	idempotencyKey := msg.ID.String()
+
+	duplicate, err := ms.idempotencyRepo.
+		IsDuplicate(ctx, idempotencyKey)
+	if err != nil {
+		return apperror.New(apperror.ErrInternal, "idempotency check failed")
+	}
+
+	if duplicate {
+		log.Printf("duplicate message skipped message_id=%s", msg.ID)
+		return nil
+	}
+
+	err = ms.storage.SaveMessage(ctx, msg)
+
+	if err != nil {
+		return apperror.New(apperror.ErrStorage, "failed to save message")
+	}
+
+	err = ms.idempotencyRepo.Save(ctx, idempotencyKey, msg.ID.String())
+
+	if err != nil {
+		return apperror.New(apperror.ErrInternal, "failed to save idempotency key")
+	}
+
+	eventPayload, err := json.Marshal(message.MessageCreatedEvent{
+		MessageID: msg.ID,
+		RoomID:    msg.RoomID,
+		UserID:    msg.UserID,
+	})
+
+	if err != nil {
+		return apperror.New(apperror.ErrInternal, "failed to marshal outbox payload")
+	}
+
+	event := &message.OutboxEvent{
+		ID:            uuid.NewString(),
+		AggregateType: "message",
+		AggregateID:   msg.ID.String(),
+		EventType:     message.OutboxEventMessageCreated,
+		Payload:       eventPayload,
+	}
+
+	err = ms.outboxRepo.SaveEvent(ctx, event)
+
+	if err != nil {
+		return apperror.New(apperror.ErrInternal, "failed to save outbox event")
+	}
 
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		updateCtx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		if err := ms.distributor.Broadcast(ctx, msg); err != nil {
-			log.Printf("Failed to broadcast message %s: %v", msg.ID, err)
-		}
-	}()
 
-	go ms.userClientSvc.UpdateLastActivity(ctx, msg.UserID)
+		ms.userClientSvc.UpdateLastActivity(updateCtx, msg.UserID.String())
+	}()
 
 	return nil
 }
@@ -108,11 +159,11 @@ func (ms *MessageService) SaveMessageBatch(ctx context.Context, msgs []*message.
 }
 
 func (ms *MessageService) BroadcastToRoom(ctx context.Context, msg *message.BaseMessage, roomID string) error {
-	msg.RoomID = roomID
+	msg.RoomID = types.RoomIDFromString(roomID)
 	return ms.distributor.Broadcast(ctx, msg)
 }
 
 func (ms *MessageService) SendToUserClient(ctx context.Context, userID string, msg *message.BaseMessage) error {
-	msg.UserID = userID
+	msg.UserID = types.UserIDFromString(userID)
 	return ms.distributor.Broadcast(ctx, msg)
 }

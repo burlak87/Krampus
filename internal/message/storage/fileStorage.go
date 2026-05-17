@@ -122,6 +122,10 @@ func (f *FileStorage) ensureFile(roomID string, buffer *RoomBuffer) error {
 		return fmt.Errorf("failed to create directory: %w", err)
 	}
 
+	if buffer.activeFile != nil {
+		buffer.activeFile.Close()
+	}
+
 	file, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return fmt.Errorf("failed to open file: %w", err)

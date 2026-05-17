@@ -6,6 +6,7 @@ import (
 
 	"krampus/internal/message/domain"
 	database "krampus/internal/sqlc"
+	"krampus/pkg/types"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -26,10 +27,10 @@ func NewMessagePGStorage(pool *pgxpool.Pool, queries *database.Queries) *Message
 // SaveMessage — сохранение одного сообщения через sqlc
 func (p *MessagePGStorage) SaveMessage(ctx context.Context, msg *domain.BaseMessage) error {
 	return p.queries.SaveMessage(ctx, database.SaveMessageParams{
-		ID:        msg.ID,
+		ID:        msg.ID.String(),
 		Type:      string(msg.Type),
-		UserID:    msg.UserID,
-		RoomID:    msg.RoomID,
+		UserID:    msg.UserID.String(),
+		RoomID:    msg.RoomID.String(),
 		Timestamp: msg.Timestamp,
 		Payload:   msg.Payload,
 		Signature: pgtype.Text{String: msg.Signature, Valid: msg.Signature != ""},
@@ -50,10 +51,10 @@ func (p *MessagePGStorage) SaveMessageBatch(ctx context.Context, msgs []*domain.
 
 	for _, msg := range msgs {
 		err := qtx.SaveMessage(ctx, database.SaveMessageParams{
-			ID:        msg.ID,
+			ID:        msg.ID.String(),
 			Type:      string(msg.Type),
-			UserID:    msg.UserID,
-			RoomID:    msg.RoomID,
+			UserID:    msg.UserID.String(),
+			RoomID:    msg.RoomID.String(),
 			Timestamp: msg.Timestamp,
 			Payload:   msg.Payload,
 			Signature: pgtype.Text{String: msg.Signature, Valid: msg.Signature != ""},
@@ -84,10 +85,10 @@ func (p *MessagePGStorage) GetRoomMessages(ctx context.Context, roomID string, l
 		}
 
 		messages = append(messages, &domain.BaseMessage{
-			ID:        row.ID,
+			ID:        types.MessageID(row.ID),
 			Type:      domain.MessageType(row.Type),
-			UserID:    row.UserID,
-			RoomID:    row.RoomID,
+			UserID:    types.UserID(row.UserID),
+			RoomID:    types.RoomID(row.RoomID),
 			Timestamp: ts,
 			Payload:   row.Payload,
 			Signature: row.Signature.String,
@@ -115,10 +116,10 @@ func (p *MessagePGStorage) GetMessage(ctx context.Context, id string) (*domain.B
 	}
 
 	return &domain.BaseMessage{
-		ID:        row.ID,
+		ID:        types.MessageID(row.ID),
 		Type:      domain.MessageType(row.Type),
-		UserID:    row.UserID,
-		RoomID:    row.RoomID,
+		UserID:    types.UserID(row.UserID),
+		RoomID:    types.RoomID(row.RoomID),
 		Timestamp: ts,
 		Payload:   row.Payload,
 		Signature: row.Signature.String,

@@ -13,17 +13,22 @@ import (
 type Querier interface {
 	BlockUser(ctx context.Context, arg BlockUserParams) error
 	CleanupOldMessages(ctx context.Context) error
+	CreateDLQMessage(ctx context.Context, arg CreateDLQMessageParams) error
 	CreateLoginAttempt(ctx context.Context, arg CreateLoginAttemptParams) error
 	CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) error
+	CreateRetryJob(ctx context.Context, arg CreateRetryJobParams) error
 	CreateTwoFaCode(ctx context.Context, arg CreateTwoFaCodeParams) (int64, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	CreateUserClient(ctx context.Context, arg CreateUserClientParams) error
 	DeleteExpiredRefreshTokens(ctx context.Context) error
 	DeleteRefreshToken(ctx context.Context, token string) error
+	DeleteRetryJob(ctx context.Context, arg DeleteRetryJobParams) error
 	DeleteRoom(ctx context.Context, id string) error
 	GetBlockedStatus(ctx context.Context, email string) (pgtype.Timestamptz, error)
 	GetFailedLogAttempts(ctx context.Context, arg GetFailedLogAttemptsParams) (int64, error)
 	GetMessage(ctx context.Context, id string) (GetMessageRow, error)
+	GetMessagesAfter(ctx context.Context, arg GetMessagesAfterParams) ([]GetMessagesAfterRow, error)
+	GetReadyRetryJobs(ctx context.Context, limit int32) ([]MessageRetryQueue, error)
 	GetRecentCodeRequests(ctx context.Context, arg GetRecentCodeRequestsParams) (int64, error)
 	GetRecentFailedAttempts(ctx context.Context, arg GetRecentFailedAttemptsParams) (int64, error)
 	GetRecentVerificationAttempts(ctx context.Context, arg GetRecentVerificationAttemptsParams) (int64, error)
@@ -45,6 +50,7 @@ type Querier interface {
 	UpdateTwoFaCodeAttempts(ctx context.Context, arg UpdateTwoFaCodeAttemptsParams) error
 	UpdateUserClient(ctx context.Context, arg UpdateUserClientParams) error
 	UpdateUserLastActive(ctx context.Context, arg UpdateUserLastActiveParams) error
+	UpsertDeliveryStatus(ctx context.Context, arg UpsertDeliveryStatusParams) error
 	UpsertRoom(ctx context.Context, arg UpsertRoomParams) error
 }
 

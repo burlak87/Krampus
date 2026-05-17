@@ -3,12 +3,12 @@ package storage
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"strings"
 
 	"krampus/internal/message/domain"
 	"krampus/pkg/config"
 	"krampus/pkg/logging"
+	"krampus/pkg/types"
 
 	"github.com/confluentinc/confluent-kafka-go/kafka"
 )
@@ -17,6 +17,8 @@ type MessageDistributor struct {
 	producer *kafka.Producer
 	logger   logging.Logger
 	topic    string
+	ctx      context.Context
+	cancel   context.CancelFunc
 }
 
 type KafkaMessage struct {
@@ -39,31 +41,38 @@ func NewMessageDistributor(cfg config.KafkaConfig, logger logging.Logger) *Messa
 		logger.Fatalf("Kafka producer failed: %v", err)
 	}
 
-	return &MessageDistributor{
+	ctx, cancel := context.WithCancel(context.Background())
+	d := &MessageDistributor{
 		producer: p,
 		logger:   logger,
 		topic:    cfg.Topics.Incoming,
+		ctx:      ctx,
+		cancel:   cancel,
 	}
+
+	go d.handleDeliveryReports()
+
+	return d
 }
 
 // BroadcastToRoom — отправка в конкретную комнату (реализация идентична Broadcast, но с подменой темы если нужно)
 func (d *MessageDistributor) BroadcastToRoom(ctx context.Context, msg *domain.BaseMessage, roomID string) error {
-	msg.RoomID = roomID
+	msg.RoomID = types.RoomIDFromString(roomID)
 	return d.Broadcast(ctx, msg)
 }
 
 // SendToUserClient — отправка персонального сообщения (например, в топик уведомлений)
 func (d *MessageDistributor) SendToUserClient(ctx context.Context, userID string, msg *domain.BaseMessage) error {
-	msg.UserID = userID
+	msg.UserID = types.UserIDFromString(userID)
 	return d.Broadcast(ctx, msg)
 }
 
 func (d *MessageDistributor) Broadcast(ctx context.Context, msg *domain.BaseMessage) error {
 	event := KafkaMessage{
-		ID:        msg.ID,
+		ID:        msg.ID.String(),
 		Type:      string(msg.Type),
-		UserID:    msg.UserID,
-		RoomID:    msg.RoomID,
+		UserID:    msg.UserID.String(),
+		RoomID:    msg.RoomID.String(),
 		Timestamp: msg.Timestamp,
 		Payload:   msg.Payload,
 	}
@@ -73,34 +82,42 @@ func (d *MessageDistributor) Broadcast(ctx context.Context, msg *domain.BaseMess
 		return err
 	}
 
-	deliveryChan := make(chan kafka.Event, 1)
-
 	err = d.producer.Produce(&kafka.Message{
-		TopicPartition: kafka.TopicPartition{Topic: &d.topic, Partition: kafka.PartitionAny},
-		Value:          data,
-		Key:            []byte(msg.RoomID),
-	}, deliveryChan)
-
-	if err != nil {
-		return fmt.Errorf("kafka produce error: %w", err)
-	}
-
-	go func() {
-		e := <-deliveryChan
-		m := e.(*kafka.Message)
-
-		if m.TopicPartition.Error != nil {
-			d.logger.Errorf("Failed to deliver message %s: %v", msg.ID, m.TopicPartition.Error)
-		} else {
-			d.logger.Infof("Message %s delivered [partition %d, offset %v]", msg.ID, m.TopicPartition.Partition, m.TopicPartition.Offset)
-		}
-		close(deliveryChan)
-	}()
+		TopicPartition: kafka.TopicPartition{
+			Topic:     &d.topic,
+			Partition: kafka.PartitionAny,
+		},
+		Value: data,
+		Key:   []byte(msg.RoomID),
+	}, nil)
 
 	return nil
 }
 
+func (d *MessageDistributor) Publish(ctx context.Context, msg *domain.BaseMessage) error {
+	return d.Broadcast(ctx, msg)
+}
+
+func (d *MessageDistributor) handleDeliveryReports() {
+	for {
+		select {
+		case <-d.ctx.Done():
+			return
+		case event := <-d.producer.Events():
+			switch e := event.(type) {
+			case *kafka.Message:
+				if e.TopicPartition.Error != nil {
+					d.logger.Errorf("kafka delivery failed topic=%s err=%v", *e.TopicPartition.Topic, e.TopicPartition.Error)
+				} else {
+					d.logger.Infof("kafka delivered topic=%s partition=%d offset=%v", *e.TopicPartition.Topic, e.TopicPartition.Partition, e.TopicPartition.Offset)
+				}
+			}
+		}
+	}
+}
+
 func (d *MessageDistributor) Close() {
+	d.cancel()
 	d.producer.Flush(15 * 1000)
 	d.producer.Close()
 }

@@ -79,3 +79,59 @@ CREATE TABLE IF NOT EXISTS messages (
 -- Индексы (sqlc их не генерирует, но они нужны в БД)
 CREATE INDEX IF NOT EXISTS idx_messages_room_timestamp ON messages(room_id, timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_messages_expires ON messages(expires_at) WHERE expires_at IS NOT NULL;
+
+CREATE TABLE message_retry_queue (
+    id UUID PRIMARY KEY,
+    message_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    room_id TEXT NOT NULL,
+    payload JSONB NOT NULL,
+    attempt INT NOT NULL DEFAULT 0,
+    next_retry_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_retry_next_retry
+ON message_retry_queue(next_retry_at);
+
+CREATE TABLE message_dlq (
+    id UUID PRIMARY KEY,
+    message_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    room_id TEXT NOT NULL,
+    payload JSONB NOT NULL,
+    reason TEXT NOT NULL,
+    failed_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE message_delivery_status (
+    message_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    status TEXT NOT NULL,
+    delivered_at TIMESTAMP NULL,
+    read_at TIMESTAMP NULL,
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    PRIMARY KEY(message_id, user_id)
+);
+
+CREATE TABLE outbox_events (
+    id UUID PRIMARY KEY,
+    aggregate_type TEXT NOT NULL,
+    aggregate_id TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    payload JSONB NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    published_at TIMESTAMP,
+    retry_count INT NOT NULL DEFAULT 0,
+    last_error TEXT
+);
+
+CREATE INDEX idx_outbox_unpublished
+ON outbox_events(published_at)
+WHERE published_at IS NULL;
+
+CREATE TABLE message_deduplication (
+    idempotency_key TEXT PRIMARY KEY,
+    message_id TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);

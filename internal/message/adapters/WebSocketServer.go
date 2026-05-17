@@ -7,7 +7,9 @@ import (
 	"time"
 
 	identityService "krampus/internal/identity/service"
+	message "krampus/internal/message/domain"
 	"krampus/internal/message/service"
+	database "krampus/internal/sqlc"
 	"krampus/pkg/config"
 	"krampus/pkg/ctxmeta"
 	"krampus/pkg/messaging/kafka"
@@ -34,11 +36,20 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
+type ReplayRepository interface {
+	GetMessagesAfterSequence(ctx context.Context, roomID types.RoomID, sequence int64, limit int) ([]*message.BaseMessage, error)
+}
+
+type PSQLReplayRepository struct {
+	queries *database.Queries
+}
+
 type WebSocketServer struct {
 	service       *service.MessageService
 	config        *config.Config
 	connectionMgr *ConnectionManager
 	authService   *identityService.WSAuthService
+	replayRepo    ReplayRepository
 }
 
 func NewWebSocketServer(
@@ -46,13 +57,18 @@ func NewWebSocketServer(
 	cfg *config.Config,
 	kafkaConsumer *kafka.Consumer,
 	authService *identityService.WSAuthService,
+	retryRepo service.RetryRepository,
+	dlqRepo service.DLQRepository,
+	deliveryRepo DeliveryStatusRepository,
+	replayRepo ReplayRepository,
 ) *WebSocketServer {
 
 	return &WebSocketServer{
 		service:       s,
 		config:        cfg,
-		connectionMgr: NewConnectionManager(kafkaConsumer),
+		connectionMgr: NewConnectionManager(kafkaConsumer, retryRepo, dlqRepo, deliveryRepo),
 		authService:   authService,
+		replayRepo:    replayRepo,
 	}
 }
 
@@ -129,6 +145,7 @@ func (w *WebSocketServer) HandleWebSocket(
 		w.service,
 		w.connectionMgr,
 	)
+	client.Start()
 
 	if err := w.connectionMgr.Register(client); err != nil {
 

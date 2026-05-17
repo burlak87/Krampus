@@ -1,27 +1,48 @@
 package adapters
 
 import (
+	"context"
 	"krampus/internal/chat/domain"
-	"krampus/internal/chat/service"
 	messageDomain "krampus/internal/message/domain"
 	messageService "krampus/internal/message/service"
+	userDomain "krampus/internal/user/domain"
 	redisStorage "krampus/internal/user/storage"
 	"krampus/pkg/apperror"
 	"krampus/pkg/config"
+	"krampus/pkg/types"
 	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
 )
 
+type Room interface {
+	GetRoom(ctx context.Context, id string) (*domain.Room, error)
+	IsRoomMember(ctx context.Context, roomID, userID string) (bool, error)
+	CanSendMessage(ctx context.Context, room *domain.Room, user *userDomain.User, msgType messageDomain.MessageType) bool
+	CreateRoom(ctx context.Context, room *domain.Room) error
+	UpdateRoom(ctx context.Context, room *domain.Room) error
+	DeleteRoom(ctx context.Context, id string) error
+	ListUserRooms(ctx context.Context, userID string) ([]*domain.Room, error)
+}
+
+type UserClient interface {
+	GetUser(ctx context.Context, id string) (*userDomain.User, error)
+	UpdateLastActivity(ctx context.Context, userID string)
+	ValidateUserPermissions(ctx context.Context, userID string, required []string) error
+	GetUserStatus(userID string) userDomain.ChatUserStatus
+	SaveUser(ctx context.Context, user *userDomain.User) error
+	UpdateUser(ctx context.Context, user *userDomain.User) error
+}
+
 type Router struct {
-	RoomService       *service.RoomService
-	UserClientService *service.UserClientService
+	RoomService       Room
+	UserClientService UserClient
 	MessageService    *messageService.MessageService
 	config            config.Config
 }
 
-func NewRouter(rs *redisStorage.RedisSessionStorage, roomSvc *service.RoomService, msgSvc *messageService.MessageService, userSvc *service.UserClientService, cfg *config.Config) *Router {
+func NewRouter(rs *redisStorage.RedisSessionStorage, roomSvc Room, userSvc UserClient, msgSvc *messageService.MessageService, cfg *config.Config) *Router {
 	return &Router{
 		RoomService:       roomSvc,
 		UserClientService: userSvc,
@@ -51,7 +72,9 @@ func handleSendMessage(s *messageService.MessageService) gin.HandlerFunc {
 			c.Error(apperror.New(apperror.ErrInvalidMessage, err.Error()))
 			return
 		}
-		msg.UserID = userID.(string)
+		msg.UserID = types.UserID(
+			userID.(string),
+		)
 
 		if err := s.Process(c.Request.Context(), &msg); err != nil {
 			c.Error(err.(*apperror.AppError)) // уже AppError
@@ -79,7 +102,7 @@ func handleGetMessages(s *messageService.MessageService) gin.HandlerFunc {
 	}
 }
 
-func handleCreateRoom(s *service.RoomService) gin.HandlerFunc {
+func handleCreateRoom(s Room) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID, _ := c.Get("user_id") // auth checked middleware
 
@@ -108,7 +131,7 @@ func handleCreateRoom(s *service.RoomService) gin.HandlerFunc {
 	}
 }
 
-func handleGetRoom(s *service.RoomService) gin.HandlerFunc {
+func handleGetRoom(s Room) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		room, err := s.GetRoom(c.Request.Context(), c.Param("room_id"))
 		if err != nil {
@@ -119,7 +142,7 @@ func handleGetRoom(s *service.RoomService) gin.HandlerFunc {
 	}
 }
 
-func handleGetUser(s *service.UserClientService) gin.HandlerFunc {
+func handleGetUser(s UserClient) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		user, err := s.GetUser(c.Request.Context(), c.Param("user_id"))
 		if err != nil {

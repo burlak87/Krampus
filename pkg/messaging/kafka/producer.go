@@ -58,10 +58,10 @@ func (p *Producer) Publish(ctx context.Context, msg *domain.BaseMessage) error {
 		Timestamp int64           `json:"timestamp"`
 		Payload   json.RawMessage `json:"payload"`
 	}{
-		ID:        msg.ID,
+		ID:        msg.ID.String(),
 		Type:      string(msg.Type),
-		UserID:    msg.UserID,
-		RoomID:    msg.RoomID,
+		UserID:    msg.UserID.String(),
+		RoomID:    msg.RoomID.String(),
 		Timestamp: msg.Timestamp,
 		Payload:   msg.Payload,
 	}

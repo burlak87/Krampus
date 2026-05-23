@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"krampus/internal/user/domain"
+	"krampus/pkg/types"
 	"strconv"
 	"time"
 
@@ -34,7 +35,7 @@ func (s *RedisSessionStorage) SetAccessToken(token string, session domain.Cached
 	return s.client.Set(context.Background(), key, data, ttl).Err()
 }
 
-func (s *RedisSessionStorage) GetAccessToken(token string) (domain.CachedSession, error) {
+func (s *RedisSessionStorage) GetAccessToken(token types.SessionID) (domain.CachedSession, error) {
 	key := fmt.Sprintf("access: %s", token)
 
 	data, err := s.client.Get(context.Background(), key).Result()
@@ -114,7 +115,7 @@ func (s *RedisSessionStorage) GetTempToken(token string) (domain.CachedTempToken
 	return tempToken, nil
 }
 
-func (r *RedisSessionStorage) ValidateSession(ctx context.Context, sessionID string, userID string) error {
+func (r *RedisSessionStorage) ValidateSession(ctx context.Context, sessionID types.SessionID, userID types.UserID) error {
 	session, err := r.GetAccessToken(sessionID)
 
 	if err != nil {
@@ -125,7 +126,7 @@ func (r *RedisSessionStorage) ValidateSession(ctx context.Context, sessionID str
 		return errors.New("session not found")
 	}
 
-	if strconv.FormatInt(session.UserID, 10) != userID {
+	if types.UserIDFromString(strconv.FormatInt(session.UserID, 10)) != userID {
 		return errors.New("invalid session owner")
 	}
 

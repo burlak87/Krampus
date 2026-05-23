@@ -33,6 +33,7 @@ type Querier interface {
 	GetRecentFailedAttempts(ctx context.Context, arg GetRecentFailedAttemptsParams) (int64, error)
 	GetRecentVerificationAttempts(ctx context.Context, arg GetRecentVerificationAttemptsParams) (int64, error)
 	GetRefreshToken(ctx context.Context, token string) (GetRefreshTokenRow, error)
+	GetReplies(ctx context.Context, replyToID pgtype.Text) ([]Message, error)
 	GetRoomByID(ctx context.Context, id string) (Room, error)
 	GetRoomMessages(ctx context.Context, arg GetRoomMessagesParams) ([]GetRoomMessagesRow, error)
 	GetTwoFaCodeByUserID(ctx context.Context, userID int64) (TwoFaCode, error)
@@ -44,6 +45,8 @@ type Querier interface {
 	RefreshDeleteByUserID(ctx context.Context, userID int64) error
 	ResetFailedAttempts(ctx context.Context, email string) error
 	SaveMessage(ctx context.Context, arg SaveMessageParams) error
+	SearchMessages(ctx context.Context, arg SearchMessagesParams) ([]Message, error)
+	SoftDelete(ctx context.Context, id string) error
 	UpdatePasswordHash(ctx context.Context, arg UpdatePasswordHashParams) error
 	UpdateRoom(ctx context.Context, arg UpdateRoomParams) error
 	UpdateTwoFAStatus(ctx context.Context, arg UpdateTwoFAStatusParams) error

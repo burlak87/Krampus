@@ -126,6 +126,11 @@ func (p *MessagePGStorage) GetMessage(ctx context.Context, id string) (*domain.B
 	}, nil
 }
 
+func (p *MessagePGStorage) SoftDeleteMessage(ctx context.Context, id string) error {
+	err := p.queries.SoftDelete(ctx, id)
+	return err
+}
+
 // CleanupOldMessages — удаление старых сообщений каждые 24ч
 func (p *MessagePGStorage) CleanupOldMessages(ctx context.Context) error {
 	return p.queries.CleanupOldMessages(ctx)

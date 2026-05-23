@@ -298,7 +298,6 @@ func (c *Client) readPump() {
 }
 
 func (c *Client) writePump() {
-
 	ctx := ctxmeta.WithMetadata(
 		c.ctx,
 		c.meta,
@@ -345,32 +344,23 @@ func (c *Client) writePump() {
 				return
 			}
 
-			c.conn.SetWriteDeadline(
-				time.Now().Add(writeWait),
-			)
+			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
 
-			writer, err := c.conn.NextWriter(
-				websocket.TextMessage,
-			)
+			writer, err := c.conn.NextWriter(websocket.TextMessage)
 
 			if err != nil {
 				return
 			}
 
 			data, _ := json.Marshal(msg)
-
 			writer.Write(data)
 
 			n := len(c.Send)
 
 			for i := 0; i < n; i++ {
-
 				writer.Write([]byte("\n"))
-
 				next := <-c.Send
-
 				data, _ := json.Marshal(next)
-
 				writer.Write(data)
 			}
 

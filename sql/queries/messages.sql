@@ -16,3 +16,17 @@ LIMIT $2;
 
 -- name: CleanupOldMessages :exec
 DELETE FROM messages WHERE expires_at < NOW();
+
+-- name: GetReplies :many
+SELECT *
+FROM messages
+WHERE reply_to_id = $1
+AND deleted_at IS NULL
+ORDER BY created_at ASC;
+
+-- name: SoftDelete :exec
+UPDATE messages
+SET deleted_at = NOW()
+WHERE id = $1;
+
+-- name: HardDelete :exec

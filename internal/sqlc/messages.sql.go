@@ -53,6 +53,52 @@ func (q *Queries) GetMessage(ctx context.Context, id string) (GetMessageRow, err
 	return i, err
 }
 
+const getReplies = `-- name: GetReplies :many
+SELECT id, type, user_id, room_id, timestamp, payload, signature, version, edited_at, deleted_at, reply_to_id, forwarded_from_id, topic_id, scheduled_at, search_vector, created_at, expires_at
+FROM messages
+WHERE reply_to_id = $1
+AND deleted_at IS NULL
+ORDER BY created_at ASC
+`
+
+func (q *Queries) GetReplies(ctx context.Context, replyToID pgtype.Text) ([]Message, error) {
+	rows, err := q.db.Query(ctx, getReplies, replyToID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Message{}
+	for rows.Next() {
+		var i Message
+		if err := rows.Scan(
+			&i.ID,
+			&i.Type,
+			&i.UserID,
+			&i.RoomID,
+			&i.Timestamp,
+			&i.Payload,
+			&i.Signature,
+			&i.Version,
+			&i.EditedAt,
+			&i.DeletedAt,
+			&i.ReplyToID,
+			&i.ForwardedFromID,
+			&i.TopicID,
+			&i.ScheduledAt,
+			&i.SearchVector,
+			&i.CreatedAt,
+			&i.ExpiresAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getRoomMessages = `-- name: GetRoomMessages :many
 SELECT id, type, user_id, room_id, timestamp, payload, signature, created_at
 FROM messages
@@ -131,5 +177,16 @@ func (q *Queries) SaveMessage(ctx context.Context, arg SaveMessageParams) error 
 		arg.Payload,
 		arg.Signature,
 	)
+	return err
+}
+
+const softDelete = `-- name: SoftDelete :exec
+UPDATE messages
+SET deleted_at = NOW()
+WHERE id = $1
+`
+
+func (q *Queries) SoftDelete(ctx context.Context, id string) error {
+	_, err := q.db.Exec(ctx, softDelete, id)
 	return err
 }

@@ -5,8 +5,110 @@
 package database
 
 import (
+	"net/netip"
+
 	"github.com/jackc/pgx/v5/pgtype"
 )
+
+type AggregateSnapshot struct {
+	ID            int64              `json:"id"`
+	AggregateType string             `json:"aggregate_type"`
+	AggregateID   string             `json:"aggregate_id"`
+	LastSequence  int64              `json:"last_sequence"`
+	Snapshot      []byte             `json:"snapshot"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+type AuditLog struct {
+	ID         int64              `json:"id"`
+	ActorID    string             `json:"actor_id"`
+	Action     string             `json:"action"`
+	EntityType string             `json:"entity_type"`
+	EntityID   string             `json:"entity_id"`
+	Payload    []byte             `json:"payload"`
+	IpAddress  *netip.Addr        `json:"ip_address"`
+	UserAgent  pgtype.Text        `json:"user_agent"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+}
+
+type Ban struct {
+	ID        pgtype.UUID      `json:"id"`
+	ChatID    pgtype.UUID      `json:"chat_id"`
+	UserID    pgtype.UUID      `json:"user_id"`
+	Reason    pgtype.Text      `json:"reason"`
+	BannedBy  pgtype.UUID      `json:"banned_by"`
+	ExpiresAt pgtype.Timestamp `json:"expires_at"`
+	CreatedAt pgtype.Timestamp `json:"created_at"`
+}
+
+type ChatMembership struct {
+	ID          pgtype.UUID        `json:"id"`
+	ChatID      string             `json:"chat_id"`
+	UserID      string             `json:"user_id"`
+	RoleID      string             `json:"role_id"`
+	JoinedAt    pgtype.Timestamptz `json:"joined_at"`
+	CreatedAt   pgtype.Timestamp   `json:"created_at"`
+	MutedUntil  pgtype.Timestamptz `json:"muted_until"`
+	BannedUntil pgtype.Timestamptz `json:"banned_until"`
+}
+
+type DeviceToken struct {
+	UserID    string             `json:"user_id"`
+	DeviceID  string             `json:"device_id"`
+	Platform  string             `json:"platform"`
+	PushToken string             `json:"push_token"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+type Event struct {
+	ID            int64              `json:"id"`
+	AggregateID   string             `json:"aggregate_id"`
+	AggregateType string             `json:"aggregate_type"`
+	EventType     string             `json:"event_type"`
+	EventVersion  int32              `json:"event_version"`
+	Sequence      pgtype.Int8        `json:"sequence"`
+	Payload       []byte             `json:"payload"`
+	CreatedBy     pgtype.Text        `json:"created_by"`
+	CorrelationID pgtype.Text        `json:"correlation_id"`
+	CausationID   pgtype.Text        `json:"causation_id"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+type File struct {
+	ID              pgtype.UUID      `json:"id"`
+	OwnerID         pgtype.UUID      `json:"owner_id"`
+	OriginalName    string           `json:"original_name"`
+	MimeType        string           `json:"mime_type"`
+	SizeBytes       int64            `json:"size_bytes"`
+	StorageKey      string           `json:"storage_key"`
+	Sha256          string           `json:"sha256"`
+	EncryptionNonce []byte           `json:"encryption_nonce"`
+	Compressed      bool             `json:"compressed"`
+	Encrypted       bool             `json:"encrypted"`
+	CreatedAt       pgtype.Timestamp `json:"created_at"`
+}
+
+type InviteLink struct {
+	ID         pgtype.UUID        `json:"id"`
+	ChatID     pgtype.UUID        `json:"chat_id"`
+	Token      string             `json:"token"`
+	CreatedBy  string             `json:"created_by"`
+	ExpiresAt  pgtype.Timestamptz `json:"expires_at"`
+	UsageLimit pgtype.Int4        `json:"usage_limit"`
+	UsageCount int32              `json:"usage_count"`
+	Revoked    bool               `json:"revoked"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+}
+
+type JoinRequest struct {
+	ID         pgtype.UUID      `json:"id"`
+	ChatID     pgtype.UUID      `json:"chat_id"`
+	UserID     pgtype.UUID      `json:"user_id"`
+	Message    pgtype.Text      `json:"message"`
+	Status     string           `json:"status"`
+	CreatedAt  pgtype.Timestamp `json:"created_at"`
+	ReviewedAt pgtype.Timestamp `json:"reviewed_at"`
+}
 
 type LoginAttempt struct {
 	ID          int64              `json:"id"`
@@ -17,16 +119,56 @@ type LoginAttempt struct {
 	UserAgent   pgtype.Text        `json:"user_agent"`
 }
 
+type MediaFile struct {
+	ID               string             `json:"id"`
+	OwnerID          string             `json:"owner_id"`
+	MediaType        string             `json:"media_type"`
+	MimeType         string             `json:"mime_type"`
+	OriginalName     string             `json:"original_name"`
+	OriginalSize     int64              `json:"original_size"`
+	CompressedSize   pgtype.Int8        `json:"compressed_size"`
+	StorageKey       string             `json:"storage_key"`
+	ThumbnailKey     pgtype.Text        `json:"thumbnail_key"`
+	Sha256           string             `json:"sha256"`
+	EncryptionNonce  []byte             `json:"encryption_nonce"`
+	Width            pgtype.Int4        `json:"width"`
+	Height           pgtype.Int4        `json:"height"`
+	DurationSeconds  pgtype.Int4        `json:"duration_seconds"`
+	ProcessingStatus string             `json:"processing_status"`
+	Metadata         []byte             `json:"metadata"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+}
+
+type Mention struct {
+	MessageID       pgtype.UUID      `json:"message_id"`
+	MentionedUserID pgtype.UUID      `json:"mentioned_user_id"`
+	CreatedAt       pgtype.Timestamp `json:"created_at"`
+}
+
 type Message struct {
-	ID        string             `json:"id"`
-	Type      string             `json:"type"`
-	UserID    string             `json:"user_id"`
-	RoomID    string             `json:"room_id"`
-	Timestamp int64              `json:"timestamp"`
-	Payload   []byte             `json:"payload"`
-	Signature pgtype.Text        `json:"signature"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
-	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+	ID              string             `json:"id"`
+	Type            string             `json:"type"`
+	UserID          string             `json:"user_id"`
+	RoomID          string             `json:"room_id"`
+	Timestamp       int64              `json:"timestamp"`
+	Payload         []byte             `json:"payload"`
+	Signature       pgtype.Text        `json:"signature"`
+	Version         int32              `json:"version"`
+	EditedAt        pgtype.Timestamptz `json:"edited_at"`
+	DeletedAt       pgtype.Timestamptz `json:"deleted_at"`
+	ReplyToID       pgtype.Text        `json:"reply_to_id"`
+	ForwardedFromID pgtype.Text        `json:"forwarded_from_id"`
+	TopicID         pgtype.Text        `json:"topic_id"`
+	ScheduledAt     pgtype.Timestamptz `json:"scheduled_at"`
+	SearchVector    interface{}        `json:"search_vector"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	ExpiresAt       pgtype.Timestamptz `json:"expires_at"`
+}
+
+type MessageAttachment struct {
+	MessageID   string             `json:"message_id"`
+	MediaFileID string             `json:"media_file_id"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 }
 
 type MessageDeduplication struct {
@@ -54,6 +196,15 @@ type MessageDlq struct {
 	FailedAt  pgtype.Timestamp `json:"failed_at"`
 }
 
+type MessageEditHistory struct {
+	ID         int64            `json:"id"`
+	MessageID  string           `json:"message_id"`
+	EditorID   string           `json:"editor_id"`
+	OldPayload []byte           `json:"old_payload"`
+	Diff       []byte           `json:"diff"`
+	EditedAt   pgtype.Timestamp `json:"edited_at"`
+}
+
 type MessageRetryQueue struct {
 	ID          pgtype.UUID      `json:"id"`
 	MessageID   string           `json:"message_id"`
@@ -63,6 +214,47 @@ type MessageRetryQueue struct {
 	Attempt     int32            `json:"attempt"`
 	NextRetryAt pgtype.Timestamp `json:"next_retry_at"`
 	CreatedAt   pgtype.Timestamp `json:"created_at"`
+}
+
+type MessageSearchProjection struct {
+	MessageID    string             `json:"message_id"`
+	RoomID       string             `json:"room_id"`
+	UserID       string             `json:"user_id"`
+	Content      string             `json:"content"`
+	Mentions     interface{}        `json:"mentions"`
+	SearchVector interface{}        `json:"search_vector"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+}
+
+type ModerationAction struct {
+	ID           int64              `json:"id"`
+	RoomID       string             `json:"room_id"`
+	TargetUserID string             `json:"target_user_id"`
+	ActorUserID  string             `json:"actor_user_id"`
+	ActionType   string             `json:"action_type"`
+	Reason       pgtype.Text        `json:"reason"`
+	ExpiresAt    pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+}
+
+type Notification struct {
+	ID        int64              `json:"id"`
+	UserID    string             `json:"user_id"`
+	Type      string             `json:"type"`
+	Title     string             `json:"title"`
+	Body      string             `json:"body"`
+	Payload   []byte             `json:"payload"`
+	Read      bool               `json:"read"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+type NotificationPreference struct {
+	UserID               string             `json:"user_id"`
+	PushEnabled          bool               `json:"push_enabled"`
+	MentionNotifications bool               `json:"mention_notifications"`
+	MessageNotifications bool               `json:"message_notifications"`
+	SoundEnabled         bool               `json:"sound_enabled"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
 }
 
 type OutboxEvent struct {
@@ -77,12 +269,71 @@ type OutboxEvent struct {
 	LastError     pgtype.Text      `json:"last_error"`
 }
 
+type Permission struct {
+	ID        string             `json:"id"`
+	Name      string             `json:"name"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+type PinnedMessage struct {
+	ChatID    pgtype.UUID      `json:"chat_id"`
+	MessageID pgtype.UUID      `json:"message_id"`
+	PinnedBy  pgtype.UUID      `json:"pinned_by"`
+	PinnedAt  pgtype.Timestamp `json:"pinned_at"`
+}
+
+type Poll struct {
+	ID             pgtype.UUID      `json:"id"`
+	MessageID      pgtype.UUID      `json:"message_id"`
+	Question       string           `json:"question"`
+	MultipleChoice bool             `json:"multiple_choice"`
+	CreatedAt      pgtype.Timestamp `json:"created_at"`
+}
+
+type PollOption struct {
+	ID     pgtype.UUID `json:"id"`
+	PollID pgtype.UUID `json:"poll_id"`
+	Title  string      `json:"title"`
+}
+
+type PollVote struct {
+	PollOptionID pgtype.UUID      `json:"poll_option_id"`
+	UserID       pgtype.UUID      `json:"user_id"`
+	CreatedAt    pgtype.Timestamp `json:"created_at"`
+}
+
+type Reaction struct {
+	MessageID pgtype.UUID      `json:"message_id"`
+	UserID    pgtype.UUID      `json:"user_id"`
+	Reaction  string           `json:"reaction"`
+	CreatedAt pgtype.Timestamp `json:"created_at"`
+}
+
 type RefreshToken struct {
 	ID        int64              `json:"id"`
 	UserID    int64              `json:"user_id"`
 	Token     string             `json:"token"`
 	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+type Report struct {
+	ID         pgtype.UUID      `json:"id"`
+	ReporterID pgtype.UUID      `json:"reporter_id"`
+	MessageID  pgtype.UUID      `json:"message_id"`
+	Reason     string           `json:"reason"`
+	CreatedAt  pgtype.Timestamp `json:"created_at"`
+}
+
+type Role struct {
+	ID        string             `json:"id"`
+	Name      string             `json:"name"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+type RolePermission struct {
+	RoleID       string `json:"role_id"`
+	PermissionID string `json:"permission_id"`
 }
 
 type Room struct {
@@ -94,6 +345,35 @@ type Room struct {
 	Settings  []byte `json:"settings"`
 	CreatedAt int64  `json:"created_at"`
 	UpdatedAt int64  `json:"updated_at"`
+}
+
+type SavedMessage struct {
+	UserID    string             `json:"user_id"`
+	MessageID string             `json:"message_id"`
+	SavedAt   pgtype.Timestamptz `json:"saved_at"`
+}
+
+type ScheduledMessage struct {
+	MessageID   string             `json:"message_id"`
+	ScheduledAt pgtype.Timestamptz `json:"scheduled_at"`
+	Published   bool               `json:"published"`
+	PublishedAt pgtype.Timestamptz `json:"published_at"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
+type SyncState struct {
+	UserID      pgtype.UUID      `json:"user_id"`
+	DeviceID    string           `json:"device_id"`
+	LastEventID int64            `json:"last_event_id"`
+	UpdatedAt   pgtype.Timestamp `json:"updated_at"`
+}
+
+type Topic struct {
+	ID        pgtype.UUID      `json:"id"`
+	ChatID    pgtype.UUID      `json:"chat_id"`
+	Title     string           `json:"title"`
+	CreatedBy pgtype.UUID      `json:"created_by"`
+	CreatedAt pgtype.Timestamp `json:"created_at"`
 }
 
 type TwoFaCode struct {
@@ -119,4 +399,22 @@ type User struct {
 	BlockedUntil      pgtype.Timestamptz `json:"blocked_until"`
 	FailedAttempts    pgtype.Int4        `json:"failed_attempts"`
 	LastFailedAttempt pgtype.Timestamptz `json:"last_failed_attempt"`
+}
+
+type UserProfile struct {
+	UserID        pgtype.UUID      `json:"user_id"`
+	Username      pgtype.Text      `json:"username"`
+	Bio           pgtype.Text      `json:"bio"`
+	AvatarMediaID pgtype.Text      `json:"avatar_media_id"`
+	Payload       []byte           `json:"payload"`
+	Settings      []byte           `json:"settings"`
+	Version       int64            `json:"version"`
+	UpdatedAt     pgtype.Timestamp `json:"updated_at"`
+}
+
+type UserStorageQuota struct {
+	UserID    string             `json:"user_id"`
+	UsedBytes int64              `json:"used_bytes"`
+	MaxBytes  int64              `json:"max_bytes"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }

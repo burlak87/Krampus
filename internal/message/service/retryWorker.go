@@ -8,6 +8,7 @@ import (
 
 	"krampus/internal/message/domain"
 	"krampus/pkg/apperror"
+	"krampus/pkg/retry"
 	"krampus/pkg/types"
 )
 
@@ -90,7 +91,7 @@ func (w *RetryWorker) processBatch(ctx context.Context) {
 			continue
 		}
 
-		base := time.Second * time.Duration(1<<job.Attempt)
+		base := retry.ExponentialBackoff(job.Attempt)
 		jitter := time.Duration(rand.Int63n(int64(base / 2)))
 		job.NextRetryAt = time.Now().Add(base + jitter)
 

@@ -53,13 +53,13 @@ func (rs *RoomService) GetRoom(ctx context.Context, id string) (*domain.Room, er
 	return room, nil
 }
 
-func (rs *RoomService) IsRoomMember(ctx context.Context, roomID, userID string) (bool, error) {
-	room, err := rs.GetRoom(ctx, roomID)
+func (rs *RoomService) IsRoomMember(ctx context.Context, roomID types.RoomID, userID types.UserID) (bool, error) {
+	room, err := rs.GetRoom(ctx, roomID.String())
 	if err != nil {
 		return false, err
 	}
 
-	return rs.isRoomMember(room, userID), nil
+	return rs.isRoomMember(room, userID.String()), nil
 }
 
 func (rs *RoomService) CanSendMessage(ctx context.Context, room *domain.Room, user *userDomain.User, msgType messageDomain.MessageType) bool {

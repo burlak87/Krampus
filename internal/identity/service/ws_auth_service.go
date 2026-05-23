@@ -37,7 +37,6 @@ func NewWSAuthService(
 	sessions SessionValidator,
 	rooms RoomAccessValidator,
 ) *WSAuthService {
-
 	return &WSAuthService{
 		jwtService: jwtService,
 		sessions:   sessions,

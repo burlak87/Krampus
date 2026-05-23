@@ -7,9 +7,168 @@
 Политека конфидициальности
 Пользовательское соглашение
 
+Так значит теперь реализуем только эти функции, так же полными файлами для копирования, и упоминаниями, что, где и как:
+chunk checksum validation
+resume conflict resolution
+session locking
+chunk integrity verification
+hash verification
+tamper validation
+transactional finalize
+integrity verification
+date ranges
+attachments
+mentions
+reactions
+validation
+routing
+join tokens
+ack replay
+offline restore
+rebuild worker
+repair jobs
+moderation tooling
+failover
+ownership
+lease ownership
+heartbeat
+rebalancing
+multiple choice
+poll closing
+vote events
+poll projections
+
+Отличная практика, но не обязательно для работы приложения это сильно улучшает production-качество, масштабирование, UX, эксплуатацию, но приложение сможет жить и без этого.
+- avatar versioning
+- parallel upload coordination
+- chunk deduplication
+- media filters
+- reaction filters
+- mention filters
+- polls
+- deep link resolver
+- sync projections
+- folder unread counts
+- folder ordering
+- folder projections
+- delta compaction
+- compressed diffs
+- pack permissions
+- animated stickers
+- cdn manifests
+- emoji aliases
+- emoji moderation
+- emoji caching
+- silent read projections
+- ML scoring
+- behavioral detection
+- rebalance
+- anonymous polls
+- quiz mode
+
+Не обязательно, это уже advanced enterprise/high-scale/large-platform уровень. Делать стоит только если реально появится нагрузка или продуктовая необходимость.
+- semantic diffs
+- link graph analysis
+- custom partition ownership optimization
+- advanced stream balancing
+
+ЧТО МОЖНО ОТЛОЖИТЬ НАДОЛГО
+
+Вот это вообще не мешает запуску production:
+
+semantic diffs
+ML scoring
+link graph analysis
+animated stickers
+cdn manifests
+emoji aliases
 
 
+Проверь что ты уже создал из моего списка что я прислал в начале, а что нет и продолжай делать следуя ему, общайся со мной только на русском без англицизмов:
+1. Профили пользователей и их настройки (отдельная доменная область, как auth). 2. Сервис загрузки файлов (полный функционал отправка, удаление, скачивание и загрузка). 3. Сжатие и шифрование сообщений, изображений и файлов (Чат данные сжимаются zstd, статичные данные сжимаются Brotli, профили и настройки пользователей сжатие LZ4, сжатие для изображений WebP, для видео h.265. Шифрование AES-256-GCM. Сначала сжатие, потом шифрование). 4. Поиск 5. Роли владелец администратор модератор участник гость 6. Матрица разрешений 7. Пригласительные ссылки 8. Запросы на вступление 9. Сохраненные сообщения Похоже на Telegram. 10. Удаление сообщений: мягкое удаление, жесткое удаление. 11. Редактирование сообщений, а имено: edited_at, edit_history 12. Ответы на сообщения 13. Темы сообщений 14. Пересылка сообщений 15. Закрепленные сообщения 16. Реакции и стикеры ❤️ 🔥 👀 16. Mentions. 17. Message scheduling 18. Moderation & Safety 19. Multi-device sync 20. Event sourcing 21. Media deduplication 22. Опросы.
 
+так теперь давай работать по этому плану(тебе надо придерживаться пунктов, но внутри них можешь менять порядок и делать то что нужно). Так же не трогай ничего связанного с протоколами транспортировки сообщений (SSE, WebSocket) на данном этапе. Список:
+1. Профили пользователей и настройки
+- версии настроек
+- optimistic locking
+- аудит изменений
+- аватары профиля
+- privacy settings
+- device settings
+2. Сервис загрузки файлов
+- multipart upload
+- resumable upload
+- signed urls
+- virus scanning
+- quotas
+- retention policies
+- lifecycle cleanup
+3. Поиск
+- ranking
+- typo tolerance
+- search projections
+- indexing worker
+- attachment search
+- mention search
+- filters
+- pagination optimization
+4. Пригласительные ссылки
+- max uses
+- revocation
+- invite audit
+- invite permissions
+- deep links
+5. Запросы на вступление
+-  approval workflow
+- moderation queue
+- notifications
+- expiration
+6. Сохраненные сообщения
+7. Редактирование сообщений
+- edit_history
+- diff storage
+- edit events
+8. Темы сообщений
+- topic projections
+- unread per topic
+- topic permissions
+9. Пересылка сообщений
+- forward chain
+- protected forwards
+- attribution validation
+10. Закрепленные сообщения
+- pin ordering
+- multiple pins
+- pin events
+11. Реакции и стикеры
+- aggregation
+- realtime sync
+- sticker packs
+- custom emoji
+- counters
+12. Moderation & Safety
+- bans
+- mute system
+- shadow bans
+- anti spam
+- rate limiting
+- abuse detection
+- media moderation
+- audit logs
+13. Multi-device sync
+- cursor sync
+- ack system
+- delta sync
+- websocket sync
+- offline replay
+14. Event sourcing
+- projections
+- snapshots
+- replay
+- partitioning
+- consumers
+- event versioning
+15. Опросы
 
 
 

@@ -21,8 +21,6 @@ import (
 	chatService "krampus/internal/chat/service"
 	chatStorage "krampus/internal/chat/storage"
 
-	"krampus/internal/events"
-
 	identityService "krampus/internal/identity/service"
 
 	messageAdapters "krampus/internal/message/adapters"
@@ -190,6 +188,8 @@ func main() {
 		producer,
 		roomSvc,
 		userClientSvc,
+		messagePG,
+		messagePG,
 	)
 
 	// -------------------------------------------------------------------------
@@ -209,38 +209,38 @@ func main() {
 	// -------------------------------------------------------------------------
 
 	// moderation
-	moderationRepo := moderation.NewRepository(sqlDB)
-	moderationTools := moderation.NewTools()
-	moderationProjection := moderation.NewProjection(moderationRepo)
+	_ = moderation.NewRepository(sqlDB)
+	moderationTools := moderation.NewTools(sqlDB)
+	moderationProjection := &moderation.Projection{}
 
 	_ = moderationTools
 	_ = moderationProjection
 
 	// polls
-	pollService := polls.NewService(sqlDB)
+	_ = polls.NewService(sqlDB)
 	pollProjection := polls.NewProjection(sqlDB)
-	pollClosingWorker := polls.NewClosingWorker(pollService)
+	pollClosingWorker := polls.NewClosingWorker(sqlDB)
 
 	_ = pollProjection
 	go pollClosingWorker.Start(ctx)
 
 	// reactions
-	reactionService := reactions.NewService(queries)
+	reactionService := reactions.NewService(sqlDB)
 	_ = reactionService
 
 	// stickers
-	stickerService := stickers.NewService()
+	stickerService := stickers.NewService(sqlDB)
 	_ = stickerService
 
 	// retention
-	retentionRepo := retention.NewRepository(queries)
-	retentionExecutor := retention.NewExecutor(retentionRepo)
-	retentionWorker := retention.NewWorker(retentionExecutor)
+	_ = retention.NewRepository(sqlDB)
+	retentionExecutor := retention.NewExecutor(sqlDB)
+	retentionWorker := retention.NewWorker(sqlDB)
 
 	go retentionWorker.Start(ctx)
 
 	// sync
-	syncService := sync.NewService(redisWrapper.RDB())
+	syncService := sync.NewService(sqlDB)
 	_ = syncService
 
 	// notifications
@@ -248,16 +248,16 @@ func main() {
 	// notificationSvc := notificationService.New(fcmProvider)
 
 	// search
-	searchConsumer := search.NewConsumer(kafkaConsumer, queries)
-	go searchConsumer.Start(ctx)
+	searchIndexer := search.NewIndexer(sqlDB)
+
+	searchConsumer := search.NewConsumer(
+		searchIndexer,
+	)
 
 	// audit
-	auditConsumer := audit.NewConsumer(kafkaConsumer, queries)
-	go auditConsumer.Start(ctx)
+	auditConsumer := audit.NewConsumer(sqlDB)
 
 	// events
-	eventProjection := events.NewProjection(queries)
-	_ = eventProjection
 
 	// -------------------------------------------------------------------------
 	// ROUTERS + WEBSOCKET
@@ -266,16 +266,20 @@ func main() {
 	chatRouter := chatAdapters.NewRouter(
 		sessionRedis,
 		roomSvc,
+		userSvc,
 		messageSvc,
-		userClientSvc,
 		cfg,
 	)
 
 	wsServer := messageAdapters.NewWebSocketServer(
 		messageSvc,
 		cfg,
+		kafkaConsumer,
 		wsAuthSvc,
-		logger,
+		messagePG,
+		messagePG,
+		messagePG,
+		messagePG,
 	)
 
 	// -------------------------------------------------------------------------

@@ -15,6 +15,7 @@ type UserClientStorage interface {
 	GetUserClient(ctx context.Context, id string) (*userDomain.User, error)
 	UpdateUserClient(ctx context.Context, user *userDomain.User) error
 	UpdateLastActivity(ctx context.Context, userID string, ts int64) error
+	ListUsers(ctx context.Context, limit, offset int) ([]*userDomain.User, error)
 }
 
 type UserClientCache interface {
@@ -33,6 +34,10 @@ func NewUserClientService(s UserClientStorage, c UserClientCache) *UserClientSer
 		storage: s,
 		cache:   c,
 	}
+}
+
+func (ucs *UserClientService) ListUsers(ctx context.Context, limit, offset int) ([]*userDomain.User, error) {
+	return ucs.storage.ListUsers(ctx, limit, offset)
 }
 
 func (ucs *UserClientService) GetUser(ctx context.Context, id string) (*userDomain.User, error) {

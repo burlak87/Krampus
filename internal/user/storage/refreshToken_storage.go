@@ -30,34 +30,34 @@ func (e *RefreshTokenStorageError) RefreshTokenError() string {
 	return e.Message
 }
 
-func (s *RefreshTokenStorage) RefreshStore(userID int64, token string, expiresAt time.Time) error {
+func (s *RefreshTokenStorage) RefreshStore(ctx context.Context, userID int64, token string, expiresAt time.Time) error {
 	params := database.CreateRefreshTokenParams{
 		UserID:    userID,
 		Token:     token,
 		ExpiresAt: pgtype.Timestamptz{Time: expiresAt, Valid: true},
 	}
 
-	return s.queries.CreateRefreshToken(context.Background(), params)
+	return s.queries.CreateRefreshToken(ctx, params)
 }
 
-func (s *RefreshTokenStorage) RefreshGet(token string) (int64, error) {
-	refreshToken, err := s.queries.GetRefreshToken(context.Background(), token)
+func (s *RefreshTokenStorage) RefreshGet(ctx context.Context, token string) (int64, error) {
+	refreshToken, err := s.queries.GetRefreshToken(ctx, token)
 	if err != nil {
 		return 0, err
 	}
 
 	if time.Now().After(refreshToken.ExpiresAt.Time) {
-		s.RefreshDelete(token)
+		s.RefreshDelete(ctx, token)
 		return 0, ErrRefreshTokenExpired
 	}
 
 	return refreshToken.UserID, nil
 }
 
-func (s *RefreshTokenStorage) RefreshDelete(token string) error {
-	return s.queries.DeleteRefreshToken(context.Background(), token)
+func (s *RefreshTokenStorage) RefreshDelete(ctx context.Context, token string) error {
+	return s.queries.DeleteRefreshToken(ctx, token)
 }
 
-func (s *RefreshTokenStorage) RefreshDeleteByUserID(userID int64) error {
-	return s.queries.RefreshDeleteByUserID(context.Background(), userID)
+func (s *RefreshTokenStorage) RefreshDeleteByUserID(ctx context.Context, userID int64) error {
+	return s.queries.RefreshDeleteByUserID(ctx, userID)
 }

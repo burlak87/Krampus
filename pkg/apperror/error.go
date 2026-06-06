@@ -10,7 +10,7 @@ const (
 	ErrInvalidMessage  ErrorCode = "INVALID_MESSAGE"
 	ErrUnauthorized    ErrorCode = "UNAUTHORIZED"
 	ErrRateLimit       ErrorCode = "RATE_LIMIT"
-	ErrRoomNotFound    ErrorCode = "ROOm_NOT_FOUND"
+	ErrRoomNotFound    ErrorCode = "ROOM_NOT_FOUND"
 	ErrUserNotFound    ErrorCode = "USER_NOT_FOUND"
 	ErrForbidden       ErrorCode = "FORBIDDEN"
 	ErrStorage         ErrorCode = "STORAGE_ERROR"

@@ -10,6 +10,12 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type AbuseScore struct {
+	UserID    string             `json:"user_id"`
+	Score     float64            `json:"score"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
 type AggregateSnapshot struct {
 	ID            int64              `json:"id"`
 	AggregateType string             `json:"aggregate_type"`
@@ -17,6 +23,15 @@ type AggregateSnapshot struct {
 	LastSequence  int64              `json:"last_sequence"`
 	Snapshot      []byte             `json:"snapshot"`
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+type AttachmentSearchProjection struct {
+	MediaID   string             `json:"media_id"`
+	MessageID string             `json:"message_id"`
+	RoomID    string             `json:"room_id"`
+	FileName  string             `json:"file_name"`
+	MimeType  string             `json:"mime_type"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
 type AuditLog struct {
@@ -52,6 +67,25 @@ type ChatMembership struct {
 	BannedUntil pgtype.Timestamptz `json:"banned_until"`
 }
 
+type CustomEmoji struct {
+	ID          string             `json:"id"`
+	Shortcode   string             `json:"shortcode"`
+	MediaFileID string             `json:"media_file_id"`
+	CreatedBy   string             `json:"created_by"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
+type DeviceSetting struct {
+	DeviceID          string             `json:"device_id"`
+	UserID            string             `json:"user_id"`
+	PushEnabled       bool               `json:"push_enabled"`
+	NotificationSound pgtype.Text        `json:"notification_sound"`
+	Language          pgtype.Text        `json:"language"`
+	Timezone          pgtype.Text        `json:"timezone"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+}
+
 type DeviceToken struct {
 	UserID    string             `json:"user_id"`
 	DeviceID  string             `json:"device_id"`
@@ -72,6 +106,15 @@ type Event struct {
 	CorrelationID pgtype.Text        `json:"correlation_id"`
 	CausationID   pgtype.Text        `json:"causation_id"`
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+type EventDlq struct {
+	ID           int64              `json:"id"`
+	EventID      int64              `json:"event_id"`
+	ConsumerName string             `json:"consumer_name"`
+	Error        string             `json:"error"`
+	Payload      []byte             `json:"payload"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 }
 
 type File struct {
@@ -139,10 +182,38 @@ type MediaFile struct {
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 }
 
+type MediaJob struct {
+	ID          int64              `json:"id"`
+	MediaFileID string             `json:"media_file_id"`
+	JobType     string             `json:"job_type"`
+	Status      string             `json:"status"`
+	Attempts    int32              `json:"attempts"`
+	ScheduledAt pgtype.Timestamptz `json:"scheduled_at"`
+	StartedAt   pgtype.Timestamptz `json:"started_at"`
+	CompletedAt pgtype.Timestamptz `json:"completed_at"`
+	Error       pgtype.Text        `json:"error"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+}
+
+type MediaRetentionPolicy struct {
+	ID            int64              `json:"id"`
+	MediaType     string             `json:"media_type"`
+	RetentionDays int32              `json:"retention_days"`
+	AutoDelete    bool               `json:"auto_delete"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
 type Mention struct {
 	MessageID       pgtype.UUID      `json:"message_id"`
 	MentionedUserID pgtype.UUID      `json:"mentioned_user_id"`
 	CreatedAt       pgtype.Timestamp `json:"created_at"`
+}
+
+type MentionProjection struct {
+	MessageID       string             `json:"message_id"`
+	MentionedUserID string             `json:"mentioned_user_id"`
+	RoomID          string             `json:"room_id"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 }
 
 type Message struct {
@@ -202,6 +273,7 @@ type MessageEditHistory struct {
 	EditorID   string           `json:"editor_id"`
 	OldPayload []byte           `json:"old_payload"`
 	Diff       []byte           `json:"diff"`
+	Version    int64            `json:"version"`
 	EditedAt   pgtype.Timestamp `json:"edited_at"`
 }
 
@@ -235,6 +307,22 @@ type ModerationAction struct {
 	Reason       pgtype.Text        `json:"reason"`
 	ExpiresAt    pgtype.Timestamptz `json:"expires_at"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+}
+
+type ModerationProjection struct {
+	UserID        string             `json:"user_id"`
+	WarningsCount int32              `json:"warnings_count"`
+	BansCount     int32              `json:"bans_count"`
+	MutesCount    int32              `json:"mutes_count"`
+	LastActionAt  pgtype.Timestamptz `json:"last_action_at"`
+}
+
+type Mute struct {
+	UserID     string             `json:"user_id"`
+	RoomID     pgtype.Text        `json:"room_id"`
+	MutedUntil pgtype.Timestamptz `json:"muted_until"`
+	Reason     pgtype.Text        `json:"reason"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
 }
 
 type Notification struct {
@@ -302,11 +390,29 @@ type PollVote struct {
 	CreatedAt    pgtype.Timestamp `json:"created_at"`
 }
 
+type ProcessedEvent struct {
+	ConsumerName string             `json:"consumer_name"`
+	EventID      int64              `json:"event_id"`
+	ProcessedAt  pgtype.Timestamptz `json:"processed_at"`
+}
+
+type ProjectionCheckpoint struct {
+	ConsumerName string             `json:"consumer_name"`
+	LastSequence int64              `json:"last_sequence"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Reaction struct {
 	MessageID pgtype.UUID      `json:"message_id"`
 	UserID    pgtype.UUID      `json:"user_id"`
 	Reaction  string           `json:"reaction"`
 	CreatedAt pgtype.Timestamp `json:"created_at"`
+}
+
+type ReactionCounter struct {
+	MessageID string `json:"message_id"`
+	Reaction  string `json:"reaction"`
+	Count     int64  `json:"count"`
 }
 
 type RefreshToken struct {
@@ -347,9 +453,23 @@ type Room struct {
 	UpdatedAt int64  `json:"updated_at"`
 }
 
+type SavedFolder struct {
+	ID        string             `json:"id"`
+	UserID    string             `json:"user_id"`
+	Title     string             `json:"title"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
 type SavedMessage struct {
 	UserID    string             `json:"user_id"`
 	MessageID string             `json:"message_id"`
+	SavedAt   pgtype.Timestamptz `json:"saved_at"`
+}
+
+type SavedMessageProjection struct {
+	UserID    string             `json:"user_id"`
+	MessageID string             `json:"message_id"`
+	FolderID  pgtype.Text        `json:"folder_id"`
 	SavedAt   pgtype.Timestamptz `json:"saved_at"`
 }
 
@@ -361,11 +481,41 @@ type ScheduledMessage struct {
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 }
 
+type SearchIndexDlq struct {
+	ID         int64              `json:"id"`
+	EntityType string             `json:"entity_type"`
+	EntityID   string             `json:"entity_id"`
+	Operation  string             `json:"operation"`
+	Error      string             `json:"error"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+}
+
+type ShadowBan struct {
+	UserID    string             `json:"user_id"`
+	Reason    string             `json:"reason"`
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+type Sticker struct {
+	ID          string      `json:"id"`
+	PackID      string      `json:"pack_id"`
+	Emoji       pgtype.Text `json:"emoji"`
+	MediaFileID string      `json:"media_file_id"`
+}
+
+type StickerPack struct {
+	ID        string             `json:"id"`
+	Title     string             `json:"title"`
+	CreatedBy string             `json:"created_by"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
 type SyncState struct {
-	UserID      pgtype.UUID      `json:"user_id"`
-	DeviceID    string           `json:"device_id"`
-	LastEventID int64            `json:"last_event_id"`
-	UpdatedAt   pgtype.Timestamp `json:"updated_at"`
+	UserID            string             `json:"user_id"`
+	DeviceID          string             `json:"device_id"`
+	LastEventSequence int64              `json:"last_event_sequence"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
 }
 
 type Topic struct {
@@ -386,6 +536,40 @@ type TwoFaCode struct {
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
+type UnreadProjection struct {
+	UserID      string             `json:"user_id"`
+	RoomID      string             `json:"room_id"`
+	UnreadCount int64              `json:"unread_count"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+}
+
+type UploadChunk struct {
+	SessionID  string             `json:"session_id"`
+	ChunkIndex int64              `json:"chunk_index"`
+	ChunkSize  int64              `json:"chunk_size"`
+	Checksum   string             `json:"checksum"`
+	Data       []byte             `json:"data"`
+	Verified   bool               `json:"verified"`
+	UploadedAt pgtype.Timestamptz `json:"uploaded_at"`
+}
+
+type UploadSession struct {
+	ID             string             `json:"id"`
+	UserID         string             `json:"user_id"`
+	FileName       string             `json:"file_name"`
+	MimeType       string             `json:"mime_type"`
+	TotalSize      int64              `json:"total_size"`
+	TotalChunks    int64              `json:"total_chunks"`
+	UploadedChunks int64              `json:"uploaded_chunks"`
+	ExpectedHash   string             `json:"expected_hash"`
+	UploadStatus   string             `json:"upload_status"`
+	Locked         bool               `json:"locked"`
+	Completed      bool               `json:"completed"`
+	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
 type User struct {
 	ID                int64              `json:"id"`
 	Username          string             `json:"username"`
@@ -402,14 +586,18 @@ type User struct {
 }
 
 type UserProfile struct {
-	UserID        pgtype.UUID      `json:"user_id"`
-	Username      pgtype.Text      `json:"username"`
-	Bio           pgtype.Text      `json:"bio"`
-	AvatarMediaID pgtype.Text      `json:"avatar_media_id"`
-	Payload       []byte           `json:"payload"`
-	Settings      []byte           `json:"settings"`
-	Version       int64            `json:"version"`
-	UpdatedAt     pgtype.Timestamp `json:"updated_at"`
+	UserID            pgtype.UUID      `json:"user_id"`
+	Username          pgtype.Text      `json:"username"`
+	Bio               pgtype.Text      `json:"bio"`
+	AvatarMediaID     pgtype.Text      `json:"avatar_media_id"`
+	Payload           []byte           `json:"payload"`
+	Settings          []byte           `json:"settings"`
+	Version           int64            `json:"version"`
+	IsPrivate         bool             `json:"is_private"`
+	AllowMentions     bool             `json:"allow_mentions"`
+	AllowGroupInvites bool             `json:"allow_group_invites"`
+	ShowLastSeen      bool             `json:"show_last_seen"`
+	UpdatedAt         pgtype.Timestamp `json:"updated_at"`
 }
 
 type UserStorageQuota struct {

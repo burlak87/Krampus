@@ -1,6 +1,7 @@
 package adapters
 
 import (
+	"context"
 	"krampus/internal/user/domain"
 	"krampus/pkg/apperror"
 	"krampus/pkg/logging"
@@ -12,9 +13,9 @@ import (
 )
 
 type UserService interface {
-	UserRegister(users domain.User) (domain.User, error)
-	UserLogin(users domain.User) (domain.TokenResponse, twofa.TwoFaCodes, error)
-	UserLogout(userID int64, password string) error
+	UserRegister(ctx context.Context, req domain.RegisterRequest) (domain.User, error)
+	UserLogin(ctx context.Context, req domain.LoginRequest) (domain.TokenResponse, twofa.TwoFaCodes, error)
+	UserLogout(ctx context.Context, userID int64, password string) error
 }
 
 type userHandler struct {
@@ -36,7 +37,7 @@ func (h *userHandler) RegisterRoutes(rg *gin.RouterGroup) {
 }
 
 func (h *userHandler) signUp(c *gin.Context) {
-	var user domain.User
+	var user domain.RegisterRequest
 	if err := c.ShouldBindJSON(&user); err != nil {
 		h.logger.Error("Failed to bind JSON: " + err.Error())
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -45,7 +46,7 @@ func (h *userHandler) signUp(c *gin.Context) {
 		return
 	}
 
-	createdUser, err := h.userService.UserRegister(user)
+	createdUser, err := h.userService.UserRegister(c.Request.Context(), user)
 	if err != nil {
 		h.logger.Error("Failed to register user: " + err.Error())
 		appErr, ok := err.(*apperror.AppError)
@@ -63,7 +64,7 @@ func (h *userHandler) signUp(c *gin.Context) {
 }
 
 func (h *userHandler) signIn(c *gin.Context) {
-	var user domain.User
+	var user domain.LoginRequest
 	if err := c.ShouldBindJSON(&user); err != nil {
 		h.logger.Error("Failed to bind JSON: " + err.Error())
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -72,7 +73,7 @@ func (h *userHandler) signIn(c *gin.Context) {
 		return
 	}
 
-	accessToken, tempToken, err := h.userService.UserLogin(user)
+	accessToken, tempToken, err := h.userService.UserLogin(c.Request.Context(), user)
 	if err != nil {
 		h.logger.Error("Failed to login user: " + err.Error())
 		appErr, ok := err.(*apperror.AppError)
@@ -112,7 +113,7 @@ func (h *userHandler) logout(c *gin.Context) {
 		return
 	}
 
-	err := h.userService.UserLogout(userID.(int64), req.Password)
+	err := h.userService.UserLogout(c.Request.Context(), userID.(int64), req.Password)
 	if err != nil {
 		h.logger.Error("Failed to logout: " + err.Error())
 		c.JSON(http.StatusBadRequest, gin.H{

@@ -4,7 +4,6 @@ package postgresql
 import (
 	"context"
 	"fmt"
-	"log"
 	"time"
 
 	"krampus/pkg/config"
@@ -37,7 +36,7 @@ func NewClient(ctx context.Context, maxAttempts int, sc config.Config) (pool *pg
 	}, maxAttempts, 5*time.Second)
 
 	if err != nil {
-		log.Fatal("Error do with tries postgresql")
+		return nil, fmt.Errorf("postgresql: all connection attempts failed: %w", err)
 	}
 
 	return pool, nil

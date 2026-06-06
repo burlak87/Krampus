@@ -324,6 +324,63 @@ func (q *Queries) GetUserByID(ctx context.Context, id int64) (GetUserByIDRow, er
 	return i, err
 }
 
+const listUsers = `-- name: ListUsers :many
+SELECT
+    id,
+    username,
+    firstname,
+    lastname,
+    email,
+    two_fa_enabled,
+    created_at
+FROM users
+ORDER BY username
+LIMIT $1 OFFSET $2
+`
+
+type ListUsersParams struct {
+	Limit  int32 `json:"limit"`
+	Offset int32 `json:"offset"`
+}
+
+type ListUsersRow struct {
+	ID           int64              `json:"id"`
+	Username     string             `json:"username"`
+	Firstname    string             `json:"firstname"`
+	Lastname     string             `json:"lastname"`
+	Email        string             `json:"email"`
+	TwoFaEnabled pgtype.Bool        `json:"two_fa_enabled"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]ListUsersRow, error) {
+	rows, err := q.db.Query(ctx, listUsers, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListUsersRow{}
+	for rows.Next() {
+		var i ListUsersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Username,
+			&i.Firstname,
+			&i.Lastname,
+			&i.Email,
+			&i.TwoFaEnabled,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const refreshDeleteByUserI = `-- name: RefreshDeleteByUserI :exec
 DELETE FROM refresh_tokens
 WHERE user_id = $1

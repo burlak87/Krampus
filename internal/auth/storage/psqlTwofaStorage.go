@@ -30,15 +30,15 @@ func (e *StorageError) Error() string {
 	return e.Message
 }
 
-func (s *Storage) RenovationTwoFAStatus(userID int64, enabled bool) error {
-	return s.queries.UpdateTwoFAStatus(context.Background(), database.UpdateTwoFAStatusParams{
+func (s *Storage) RenovationTwoFAStatus(ctx context.Context, userID int64, enabled bool) error {
+	return s.queries.UpdateTwoFAStatus(ctx, database.UpdateTwoFAStatusParams{
 		ID:           userID,
 		TwoFaEnabled: pgtype.Bool{Bool: enabled, Valid: true},
 	})
 }
 
-func (s *Storage) InsertTwoFaCode(userID int64, code string, expiresAt time.Time) error {
-	_, err := s.queries.CreateTwoFaCode(context.Background(), database.CreateTwoFaCodeParams{
+func (s *Storage) InsertTwoFaCode(ctx context.Context, userID int64, code string, expiresAt time.Time) error {
+	_, err := s.queries.CreateTwoFaCode(ctx, database.CreateTwoFaCodeParams{
 		UserID:    userID,
 		Code:      code,
 		ExpiresAt: pgtype.Timestamptz{Time: expiresAt, Valid: true},
@@ -46,8 +46,8 @@ func (s *Storage) InsertTwoFaCode(userID int64, code string, expiresAt time.Time
 	return err
 }
 
-func (s *Storage) SelectTwoFaCodeByUserID(userID int64) (domain.TwoFaCode, error) {
-	code, err := s.queries.GetTwoFaCodeByUserID(context.Background(), userID)
+func (s *Storage) SelectTwoFaCodeByUserID(ctx context.Context, userID int64) (domain.TwoFaCode, error) {
+	code, err := s.queries.GetTwoFaCodeByUserID(ctx, userID)
 	if err != nil {
 		return domain.TwoFaCode{}, err
 	}
@@ -63,19 +63,19 @@ func (s *Storage) SelectTwoFaCodeByUserID(userID int64) (domain.TwoFaCode, error
 	}, nil
 }
 
-func (s *Storage) RenovationTwoFaCodeAttempts(codeID int64, attempts int64) error {
-	return s.queries.UpdateTwoFaCodeAttempts(context.Background(), database.UpdateTwoFaCodeAttemptsParams{
+func (s *Storage) RenovationTwoFaCodeAttempts(ctx context.Context, codeID int64, attempts int64) error {
+	return s.queries.UpdateTwoFaCodeAttempts(ctx, database.UpdateTwoFaCodeAttemptsParams{
 		ID:       codeID,
 		Attempts: pgtype.Int4{Int32: int32(attempts), Valid: true},
 	})
 }
 
-func (s *Storage) MarkTwoFaCodeUsed(codeID int64) error {
-	return s.queries.MarkTwoFaCodeAsUsed(context.Background(), codeID)
+func (s *Storage) MarkTwoFaCodeUsed(ctx context.Context, codeID int64) error {
+	return s.queries.MarkTwoFaCodeAsUsed(ctx, codeID)
 }
 
-func (s *Storage) SelectRecentCodeRequests(userID int64, since time.Time) (int64, error) {
-	count, err := s.queries.GetRecentCodeRequests(context.Background(), database.GetRecentCodeRequestsParams{
+func (s *Storage) SelectRecentCodeRequests(ctx context.Context, userID int64, since time.Time) (int64, error) {
+	count, err := s.queries.GetRecentCodeRequests(ctx, database.GetRecentCodeRequestsParams{
 		UserID:    userID,
 		CreatedAt: pgtype.Timestamptz{Time: since, Valid: true},
 	})
@@ -86,8 +86,8 @@ func (s *Storage) SelectRecentCodeRequests(userID int64, since time.Time) (int64
 	return count, nil
 }
 
-func (s *Storage) SelectRecentVerificationAttempts(userID int64, since time.Time) (int64, error) {
-	count, err := s.queries.GetRecentVerificationAttempts(context.Background(), database.GetRecentVerificationAttemptsParams{
+func (s *Storage) SelectRecentVerificationAttempts(ctx context.Context, userID int64, since time.Time) (int64, error) {
+	count, err := s.queries.GetRecentVerificationAttempts(ctx, database.GetRecentVerificationAttemptsParams{
 		UserID:    userID,
 		CreatedAt: pgtype.Timestamptz{Time: since, Valid: true},
 	})

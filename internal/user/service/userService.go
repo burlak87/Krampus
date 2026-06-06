@@ -1,8 +1,8 @@
 package service
 
 import (
+	"context"
 	"errors"
-	"fmt"
 	"math"
 	"regexp"
 	"time"
@@ -10,23 +10,23 @@ import (
 	twofa "krampus/internal/auth/domain"
 	"krampus/internal/user/domain"
 	redis "krampus/internal/user/storage"
+	"krampus/pkg/logging"
 
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 )
 
 type UserStorage interface {
-	InsertUser(user domain.User) (int64, error)
-	SelectUserByEmail(email string) (domain.User, error)
-	SelectUserByID(userID int64) (domain.User, error)
-	BlockUser(email, blockedUntil string) error
-	// RedisSessionStorage() redis.SessionStorage
+	InsertUser(ctx context.Context, user domain.User) (int64, error)
+	SelectUserByEmail(ctx context.Context, email string) (domain.User, error)
+	SelectUserByID(ctx context.Context, userID int64) (domain.User, error)
+	BlockUser(ctx context.Context, email, blockedUntil string) error
 }
 
 type LoginAttemptStorage interface {
-	LogAttempt(email string, result bool, attemptTime time.Time) error
-	GetFailedLogAttempts(email string, windowStart time.Time) (int64, error)
-	UserBlocked(email string, windowStart time.Time) ([]map[string]interface{}, error)
+	LogAttempt(ctx context.Context, email string, result bool, attemptTime time.Time) error
+	GetFailedLogAttempts(ctx context.Context, email string, windowStart time.Time) (int64, error)
+	UserBlocked(ctx context.Context, email string, windowStart time.Time) ([]map[string]any, error)
 }
 
 type User struct {
@@ -35,6 +35,7 @@ type User struct {
 	refreshTokenService *RefreshToken
 	redisStorage        *redis.RedisSessionStorage
 	jwtSecret           string
+	logger              *logging.Logger
 }
 
 func NewUser(
@@ -50,125 +51,98 @@ func NewUser(
 		refreshTokenService: refreshToken,
 		redisStorage:        redisStorage,
 		jwtSecret:           jwt,
+		logger:              logging.GetLogger(),
 	}
 }
 
-func (s *User) UserRegister(user domain.User) (domain.User, error) {
-	fmt.Printf("DEBUG SERVICE REGISTER: Starting registration for: %s\n", user.Email)
-
-	if user.Username == "" || user.Firstname == "" || user.Lastname == "" || user.Email == "" {
-		return domain.User{}, errors.New("Invalid input: all fields are required")
+func (s *User) UserRegister(ctx context.Context, req domain.RegisterRequest) (domain.User, error) {
+	if req.Username == "" || req.Firstname == "" || req.Lastname == "" || req.Email == "" {
+		return domain.User{}, errors.New("invalid input: all fields are required")
 	}
 
-	if user.Password == "" || len(user.Password) < 8 {
-		return domain.User{}, errors.New("Invalid password input: password must br at least 8 characters")
+	if req.Password == "" || len(req.Password) < 8 {
+		return domain.User{}, errors.New("invalid password: must be at least 8 characters")
 	}
 
-	hasLetters, _ := regexp.MatchString(`[a-zA-Zа-яА-Я]`, user.Password)
-	hasDigits, _ := regexp.MatchString(`[0-9]`, user.Password)
-	hasSpecial, _ := regexp.MatchString(`[^a-zA-Zа-яА-Я0-9\s]`, user.Password)
+	hasLetters, _ := regexp.MatchString(`[a-zA-Zа-яА-Я]`, req.Password)
+	hasDigits, _ := regexp.MatchString(`[0-9]`, req.Password)
+	hasSpecial, _ := regexp.MatchString(`[^a-zA-Zа-яА-Я0-9\s]`, req.Password)
 
 	if !hasLetters || !hasDigits || !hasSpecial {
-		return domain.User{}, errors.New("Invalid password input: password must contain letters, digits and special characters")
+		return domain.User{}, errors.New("invalid password: must contain letters, digits and special characters")
 	}
 
-	hash, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
+	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
-		return domain.User{}, errors.New("Error hashing password")
+		return domain.User{}, errors.New("error hashing password")
 	}
 
 	userToSave := domain.User{
-		Username:     user.Username,
-		Firstname:    user.Firstname,
-		Lastname:     user.Lastname,
-		Email:        user.Email,
+		Username:     req.Username,
+		Firstname:    req.Firstname,
+		Lastname:     req.Lastname,
+		Email:        req.Email,
 		PasswordHash: string(hash),
-		TwoFAEnabled: user.TwoFAEnabled,
+		TwoFAEnabled: req.TwoFAEnabled,
 	}
 
-	fmt.Printf("DEBUG SERVICE REGISTER: Calling storage.InsertUser\n")
-	id, err := s.userStorage.InsertUser(userToSave)
+	id, err := s.userStorage.InsertUser(ctx, userToSave)
 	if err != nil {
-		fmt.Printf("DEBUG SERVICE REGISTER: Storage error: %v\n", err)
 		return domain.User{}, err
 	}
 
 	createdUser := domain.User{
 		ID:           id,
-		Username:     user.Username,
-		Firstname:    user.Firstname,
-		Lastname:     user.Lastname,
-		Email:        user.Email,
-		PasswordHash: user.PasswordHash,
-		TwoFAEnabled: user.TwoFAEnabled,
+		Username:     req.Username,
+		Firstname:    req.Firstname,
+		Lastname:     req.Lastname,
+		Email:        req.Email,
+		TwoFAEnabled: req.TwoFAEnabled,
 		CreatedAt:    time.Now(),
 	}
 
-	fmt.Printf("DEBUG SERVICE REGISTER: SUCCESS - Created student with ID: %d\n", id)
+	s.logger.Infof("user registered: id=%d email=%s", id, req.Email)
 	return createdUser, nil
 }
 
-func (s *User) UserLogin(user domain.User) (domain.TokenResponse, twofa.TwoFaCodes, error) {
-	fmt.Printf("DEBUG LOGIN: Attempting login for email: '%s'\n", user.Email)
-	fmt.Printf("DEBUG LOGIN: Password provided: '%s'\n", user.Password)
-	fmt.Printf("DEBUG LOGIN: TwoFA enabled: '%v'\n", user.TwoFAEnabled)
-
-	if user.Email == "" || user.Password == "" {
-		fmt.Printf("DEBUG LOGIN: Email or password empty\n")
+func (s *User) UserLogin(ctx context.Context, req domain.LoginRequest) (domain.TokenResponse, twofa.TwoFaCodes, error) {
+	if req.Email == "" || req.Password == "" {
 		return domain.TokenResponse{}, twofa.TwoFaCodes{}, errors.New("email and password are required")
 	}
 
-	blocked, minutesLeft, err := s.IsUserBlocked(user.Email)
+	blocked, minutesLeft, err := s.IsUserBlocked(ctx, req.Email)
 	if err != nil {
-		fmt.Printf("DEBUG LOGIN: Error checking block status: %v\n", err)
 		return domain.TokenResponse{}, twofa.TwoFaCodes{}, err
 	}
-
 	if blocked {
-		fmt.Printf("DEBUG LOGIN: User is blocked for %d minutes\n", minutesLeft)
-		return domain.TokenResponse{}, twofa.TwoFaCodes{}, fmt.Errorf("your account is blocked for %d minutes", minutesLeft)
+		return domain.TokenResponse{}, twofa.TwoFaCodes{}, errors.New("account temporarily blocked")
 	}
+	_ = minutesLeft
 
-	fmt.Printf("DEBUG LOGIN: Searching user in database...\n")
-	dbUser, err := s.userStorage.SelectUserByEmail(user.Email)
+	dbUser, err := s.userStorage.SelectUserByEmail(ctx, req.Email)
 	if err != nil {
-		fmt.Printf("DEBUG LOGIN: Database error or user not found: %v\n", err)
-		s.LogLoginAttempt(user.Email, false)
+		s.LogLoginAttempt(ctx, req.Email, false)
 		return domain.TokenResponse{}, twofa.TwoFaCodes{}, errors.New("invalid credentials")
 	}
 
-	fmt.Printf("DEBUG LOGIN: User found - ID: %d, Email: %s\n", dbUser.ID, dbUser.Email)
-	fmt.Printf("DEBUG LOGIN: Stored password hash: %s\n", dbUser.PasswordHash)
-	fmt.Printf("DEBUG LOGIN: Provided password: %s\n", user.Password)
-
-	fmt.Printf("DEBUG LOGIN: Comparing passwords...\n")
-	err = bcrypt.CompareHashAndPassword([]byte(dbUser.PasswordHash), []byte(user.Password))
-	if err != nil {
-		fmt.Printf("DEBUG LOGIN: Password comparison failed: %v\n", err)
-		s.LogLoginAttempt(user.Email, false)
+	if err = bcrypt.CompareHashAndPassword([]byte(dbUser.PasswordHash), []byte(req.Password)); err != nil {
+		s.LogLoginAttempt(ctx, req.Email, false)
 		return domain.TokenResponse{}, twofa.TwoFaCodes{}, errors.New("invalid credentials")
 	}
 
-	fmt.Printf("DEBUG LOGIN: Password correct!\n")
-
-	attempts, err := s.GetFailedAttempts(user.Email)
+	attempts, err := s.GetFailedAttempts(ctx, req.Email)
 	if err != nil {
-		fmt.Printf("DEBUG LOGIN: Error getting failed attempts: %v\n", err)
 		return domain.TokenResponse{}, twofa.TwoFaCodes{}, err
 	}
 
-	maxAttempts := int64(5)
-	if attempts >= maxAttempts {
-		fmt.Printf("DEBUG LOGIN: Too many failed attempts: %d\n", attempts)
-		s.BlockUser(user.Email)
+	if attempts >= int64(5) {
+		s.BlockUser(ctx, req.Email)
 		return domain.TokenResponse{}, twofa.TwoFaCodes{}, errors.New("too many failed attempts, account blocked")
 	}
 
-	// if dbUser.TwoFAEnabled {
-	if dbUser.TwoFAEnabled != false {
+	if dbUser.TwoFAEnabled {
 		tempToken, err := s.GenerateTempToken(dbUser.ID)
 		if err != nil {
-			fmt.Printf("DEBUG LOGIN: Error generating temp token: %v\n", err)
 			return domain.TokenResponse{}, twofa.TwoFaCodes{}, err
 		}
 		return domain.TokenResponse{}, twofa.TwoFaCodes{RequiresTwoFa: true, TempToken: tempToken}, nil
@@ -176,13 +150,11 @@ func (s *User) UserLogin(user domain.User) (domain.TokenResponse, twofa.TwoFaCod
 
 	accessToken, err := s.GenerateAccessToken(dbUser.ID)
 	if err != nil {
-		fmt.Printf("DEBUG LOGIN: Error generating access token: %v\n", err)
 		return domain.TokenResponse{}, twofa.TwoFaCodes{}, err
 	}
 
-	refreshToken, err := s.refreshTokenService.GenerateRefreshToken(dbUser.ID)
+	refreshToken, err := s.refreshTokenService.GenerateRefreshToken(ctx, dbUser.ID)
 	if err != nil {
-		fmt.Printf("DEBUG LOGIN: Error generating refresh token: %v\n", err)
 		return domain.TokenResponse{}, twofa.TwoFaCodes{}, err
 	}
 
@@ -195,63 +167,47 @@ func (s *User) UserLogin(user domain.User) (domain.TokenResponse, twofa.TwoFaCod
 		ExpiresAt:    time.Now().Add(15 * time.Minute),
 	}
 
-	if err = s.redisStorage.SetAccessToken(accessToken, session); err != nil {
-		fmt.Printf("Cache set error: %v\n", err)
+	if err = s.redisStorage.SetAccessToken(ctx, accessToken, session); err != nil {
+		s.logger.Warnf("cache set error for user %d: %v", dbUser.ID, err)
 	}
-	if err = s.redisStorage.SetSessionByUserID(dbUser.ID, session); err != nil {
-		fmt.Printf("Session cache error: %v\n", err)
+	if err = s.redisStorage.SetSessionByUserID(ctx, dbUser.ID, session); err != nil {
+		s.logger.Warnf("session cache error for user %d: %v", dbUser.ID, err)
 	}
 
-	s.LogLoginAttempt(user.Email, true)
-	fmt.Printf("DEBUG LOGIN: Login successful for user ID: %d\n", dbUser.ID)
+	s.LogLoginAttempt(ctx, req.Email, true)
+	s.logger.Infof("user logged in: id=%d", dbUser.ID)
 	return domain.TokenResponse{AccessToken: accessToken, RefreshToken: refreshToken}, twofa.TwoFaCodes{}, nil
 }
 
-func (s *User) UserLogout(userID int64, password string) error {
-	fmt.Printf("DEBUG LOGOUT: Searching user in database...\n")
-	dbUser, err := s.userStorage.SelectUserByID(userID)
+func (s *User) UserLogout(ctx context.Context, userID int64, password string) error {
+	dbUser, err := s.userStorage.SelectUserByID(ctx, userID)
 	if err != nil {
-		fmt.Printf("DEBUG LOGOUT: Database error or user not found: %v\n", err)
-		s.LogLoginAttempt(dbUser.Email, false)
 		return errors.New("invalid credentials")
 	}
 
-	fmt.Printf("DEBUG LOGOUT: User found - ID: %d, Email: %s\n", dbUser.ID, dbUser.Email)
-	fmt.Printf("DEBUG LOGOUT: Stored password hash: %s\n", dbUser.PasswordHash)
-	fmt.Printf("DEBUG LOGOUT: Provided password: %s\n", dbUser.Password)
-
-	fmt.Printf("DEBUG LOGOUT: Comparing passwords...\n")
-	err = bcrypt.CompareHashAndPassword([]byte(dbUser.PasswordHash), []byte(dbUser.Password))
-	if err != nil {
-		fmt.Printf("DEBUG LOGOUT: Password comparison failed: %v\n", err)
-		s.LogLoginAttempt(dbUser.Email, false)
+	if err = bcrypt.CompareHashAndPassword([]byte(dbUser.PasswordHash), []byte(password)); err != nil {
+		s.LogLoginAttempt(ctx, dbUser.Email, false)
 		return errors.New("invalid credentials")
 	}
 
-	fmt.Printf("DEBUG LOGOUT: Password correct!\n")
-
-	if err = s.redisStorage.DeleteSessionByUserID(userID); err != nil {
-		fmt.Printf("Redis session delete error: %v\n", err)
+	if err = s.redisStorage.DeleteSessionByUserID(ctx, userID); err != nil {
+		s.logger.Warnf("redis session delete error for user %d: %v", userID, err)
 	}
 
-	err = s.refreshTokenService.DeleteRefreshTokensByUserID(userID)
-	if err != nil {
+	if err = s.refreshTokenService.DeleteRefreshTokensByUserID(ctx, userID); err != nil {
 		return err
 	}
 
-	fmt.Printf("DEBUG LOGOUT: User %d successful logged out\n", userID)
+	s.logger.Infof("user logged out: id=%d", userID)
 	return nil
 }
 
-func (s *User) BlockUser(email string) {
+func (s *User) BlockUser(ctx context.Context, email string) {
 	now := time.Now()
 	blockedUntil := now.Add(1 * time.Minute).Format(time.RFC3339)
-
-	s.LogLoginAttempt(email, false)
-
-	err := s.userStorage.BlockUser(email, blockedUntil)
-	if err != nil {
-		fmt.Printf("Ошибка блокировки: %v\n", err)
+	s.LogLoginAttempt(ctx, email, false)
+	if err := s.userStorage.BlockUser(ctx, email, blockedUntil); err != nil {
+		s.logger.Warnf("block user error for %s: %v", email, err)
 	}
 }
 
@@ -273,47 +229,35 @@ func (s *User) GenerateTempToken(id int64) (string, error) {
 	return token.SignedString([]byte(s.jwtSecret))
 }
 
-func (s *User) LogLoginAttempt(email string, result bool) {
-	attemptTime := time.Now().UTC()
-
-	err := s.loginAttemptStorage.LogAttempt(email, result, attemptTime)
-	if err != nil {
-		fmt.Printf("Ошибка логирования: %v\n", err)
+func (s *User) LogLoginAttempt(ctx context.Context, email string, result bool) {
+	if err := s.loginAttemptStorage.LogAttempt(ctx, email, result, time.Now().UTC()); err != nil {
+		s.logger.Warnf("login attempt log error for %s: %v", email, err)
 	}
 }
 
-func (s *User) GetFailedAttempts(email string) (int64, error) {
+func (s *User) GetFailedAttempts(ctx context.Context, email string) (int64, error) {
 	now := time.Now().UTC()
 	windowStart := now.Add(-1 * time.Minute)
-
-	count, err := s.loginAttemptStorage.GetFailedLogAttempts(email, windowStart)
-	if err != nil {
-		fmt.Printf("Ошибка подсчета попыток: %v\n", err)
-		return int64(0), err
-	}
-
-	return int64(count), err
+	return s.loginAttemptStorage.GetFailedLogAttempts(ctx, email, windowStart)
 }
 
-func (s *User) IsUserBlocked(email string) (bool, int64, error) {
-	now := time.Now().UTC()
-	windowStart := now
-
-	result, err := s.loginAttemptStorage.UserBlocked(email, windowStart)
+func (s *User) IsUserBlocked(ctx context.Context, email string) (bool, int64, error) {
+	result, err := s.loginAttemptStorage.UserBlocked(ctx, email, time.Now().UTC())
 	if err != nil {
-		fmt.Printf("Ошибка проверки блокировки: %v\n", err)
 		return false, 0, err
 	}
 
 	if len(result) > 0 {
-		blockedUntilStr, ok := result[0]["blocked_until"].(string)
-		if !ok {
-			return false, 0, errors.New("invalid format for blocked_until")
+		// UserBlocked always returns one row; the is_blocked flag tells us
+		// whether the account is actually blocked. blocked_until is a time.Time
+		// (zero value when never blocked).
+		if blocked, _ := result[0]["is_blocked"].(bool); !blocked {
+			return false, 0, nil
 		}
 
-		blockedUntil, err := time.Parse(time.RFC3339, blockedUntilStr)
-		if err != nil {
-			return false, 0, err
+		blockedUntil, ok := result[0]["blocked_until"].(time.Time)
+		if !ok {
+			return false, 0, errors.New("invalid format for blocked_until")
 		}
 
 		minutesLeft := math.Ceil(time.Until(blockedUntil).Minutes())

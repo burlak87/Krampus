@@ -3,6 +3,7 @@ package kafka
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"sync"
 	"time"
 
@@ -24,7 +25,7 @@ type Consumer struct {
 
 func NewConsumer(cfg config.KafkaConfig, logger logging.Logger) (*Consumer, error) {
 	c, err := kafka.NewConsumer(&kafka.ConfigMap{
-		"bootstrap.servers":     cfg.Brokers,
+		"bootstrap.servers":     strings.Join(cfg.Brokers, ","),
 		"group.id":              "krampus-consumer-group",
 		"auto.offset.reset":     "latest",
 		"enable.auto.commit":    true,

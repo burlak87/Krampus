@@ -29,6 +29,7 @@ var upgrader = websocket.Upgrader{
 
 		allowedOrigins := map[string]bool{
 			"http://localhost:3000": true,
+			"http://localhost:8000": true,
 			"https://yourapp.com":   true,
 		}
 
@@ -70,6 +71,10 @@ func NewWebSocketServer(
 		authService:   authService,
 		replayRepo:    replayRepo,
 	}
+}
+
+func (w *WebSocketServer) Manager() *ConnectionManager {
+	return w.connectionMgr
 }
 
 func (w *WebSocketServer) HandleWebSocket(

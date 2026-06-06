@@ -32,6 +32,10 @@ type IdempotencyRepository interface {
 	Save(ctx context.Context, key string, messageID string) error
 }
 
+type FileMessageStore interface {
+	SaveMessage(roomID string, msg *message.BaseMessage) error
+}
+
 type MessageService struct {
 	storage         *messageStorage.MessagePGStorage
 	distributor     *messageStorage.MessageDistributor
@@ -40,6 +44,7 @@ type MessageService struct {
 	rateLimiter     *RateLimiter
 	outboxRepo      OutboxRepository
 	idempotencyRepo IdempotencyRepository
+	fileStore       FileMessageStore
 }
 
 func NewMessageService(storage *messageStorage.MessagePGStorage, dist *messageStorage.MessageDistributor, roomSvc *chat.RoomService, userClientSvc *chat.UserClientService, outboxRepo OutboxRepository, idempotencyRepo IdempotencyRepository) *MessageService {
@@ -52,6 +57,10 @@ func NewMessageService(storage *messageStorage.MessagePGStorage, dist *messageSt
 		outboxRepo:      outboxRepo,
 		idempotencyRepo: idempotencyRepo,
 	}
+}
+
+func (ms *MessageService) SetFileStore(fs FileMessageStore) {
+	ms.fileStore = fs
 }
 
 func (ms *MessageService) Process(ctx context.Context, msg *message.BaseMessage) error {
@@ -98,6 +107,12 @@ func (ms *MessageService) Process(ctx context.Context, msg *message.BaseMessage)
 		return apperror.New(apperror.ErrStorage, "failed to save message")
 	}
 
+	if ms.fileStore != nil {
+		go func() {
+			_ = ms.fileStore.SaveMessage(msg.RoomID.String(), msg)
+		}()
+	}
+
 	err = ms.idempotencyRepo.Save(ctx, idempotencyKey, msg.ID.String())
 
 	if err != nil {
@@ -129,10 +144,7 @@ func (ms *MessageService) Process(ctx context.Context, msg *message.BaseMessage)
 	}
 
 	go func() {
-		updateCtx, cancel := context.WithCancel(context.Background())
-		defer cancel()
-
-		ms.userClientSvc.UpdateLastActivity(updateCtx, msg.UserID.String())
+		ms.userClientSvc.UpdateLastActivity(ctx, msg.UserID.String())
 	}()
 
 	return nil

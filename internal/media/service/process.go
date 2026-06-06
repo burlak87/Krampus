@@ -7,11 +7,6 @@ import (
 	"os"
 	"path/filepath"
 
-	mediaimage "krampus/internal/media/image"
-	"krampus/internal/media/metadata"
-	"krampus/internal/media/thumbnails"
-	mediavideo "krampus/internal/media/video"
-
 	"krampus/pkg/compression"
 	cryptoutil "krampus/pkg/crypto"
 )
@@ -65,7 +60,7 @@ func (s *Service) ProcessMedia(
 			return err
 		}
 
-		meta, err := metadata.ExtractImageMetadata(
+		meta, err := ExtractImageMetadata(
 			tmpFile,
 		)
 
@@ -76,7 +71,7 @@ func (s *Service) ProcessMedia(
 		width = &meta.Width
 		height = &meta.Height
 
-		img, err := metadata.DecodeImage(
+		img, err := DecodeImage(
 			tmpFile,
 		)
 
@@ -84,7 +79,7 @@ func (s *Service) ProcessMedia(
 			return err
 		}
 
-		webpBytes, err := mediaimage.EncodeWebP(
+		webpBytes, err := EncodeWebP(
 			img,
 		)
 
@@ -92,11 +87,11 @@ func (s *Service) ProcessMedia(
 			return err
 		}
 
-		thumb := thumbnails.GenerateThumbnail(
+		thumb := GenerateThumbnail(
 			img,
 		)
 
-		thumbnailBytes, err = mediaimage.EncodeWebP(
+		thumbnailBytes, err = EncodeWebP(
 			thumb,
 		)
 
@@ -134,7 +129,7 @@ func (s *Service) ProcessMedia(
 			return err
 		}
 
-		err = mediavideo.CompressH265(
+		err = CompressH265(
 			input,
 			output,
 		)

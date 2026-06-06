@@ -1,7 +1,11 @@
-FROM golang:1.24.6-alpine AS builder
+FROM golang:1.25-bookworm AS builder
 
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup \
-    && apk add --no-cache ca-certificates tzdata upx
+# CGO is required: confluent-kafka-go (librdkafka) and chai2010/webp are cgo
+# packages. With CGO_ENABLED=0 they compile to empty stubs and the build fails
+# with "undefined: kafka.Consumer" / "undefined: webpGetInfo".
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends gcc libc6-dev ca-certificates tzdata \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -10,31 +14,25 @@ RUN go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /server ./cmd/app
+# confluent-kafka-go ships a self-contained static librdkafka for glibc, so no
+# build tags or system librdkafka are needed here.
+RUN CGO_ENABLED=1 go build -ldflags="-s -w" -o /server ./cmd/app
 
-RUN upx --best --lzma /server
+FROM debian:bookworm-slim
 
-RUN mkdir -p /app/logs && chown appuser:appgroup /app/logs
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates tzdata \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd -r appgroup && useradd -r -g appgroup appuser
 
-RUN mkdir -p /tmp && chown appuser:appgroup /tmp
+COPY --from=builder /server /server
+COPY --from=builder /app/sql/ /app/sql/
 
-FROM alpine:latest
-
-COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
-COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
-COPY --from=builder /etc/passwd /etc/passwd
-COPY --from=builder /etc/group /etc/group
-
-COPY --from=builder --chown=appuser:appgroup /server /server
-COPY --from=builder /app/config.yaml /config.yaml
-
-COPY --from=builder --chown=appuser:appgroup /app/sql/ /app/sql/
-
-RUN mkdir -p /app/logs && chown appuser:appgroup /app/logs
+RUN mkdir -p /app/logs /app/storage && chown -R appuser:appgroup /app
 
 USER appuser
 
-WORKDIR /
+WORKDIR /app
 
 EXPOSE 8080
 

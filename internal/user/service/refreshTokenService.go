@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"errors"
 	"time"
 
@@ -10,10 +11,10 @@ import (
 )
 
 type RefreshTokenStorage interface {
-	RefreshStore(userID int64, token string, expiresAt time.Time) error
-	RefreshGet(token string) (int64, error)
-	RefreshDelete(token string) error
-	RefreshDeleteByUserID(userID int64) error
+	RefreshStore(ctx context.Context, userID int64, token string, expiresAt time.Time) error
+	RefreshGet(ctx context.Context, token string) (int64, error)
+	RefreshDelete(ctx context.Context, token string) error
+	RefreshDeleteByUserID(ctx context.Context, userID int64) error
 }
 
 type RefreshToken struct {
@@ -28,7 +29,7 @@ func NewRefreshToken(refreshToken RefreshTokenStorage, jwt string) *RefreshToken
 	}
 }
 
-func (s *RefreshToken) GenerateRefreshToken(id int64) (string, error) {
+func (s *RefreshToken) GenerateRefreshToken(ctx context.Context, id int64) (string, error) {
 	token := jwt.New(jwt.SigningMethodHS256)
 
 	claims := token.Claims.(jwt.MapClaims)
@@ -41,12 +42,12 @@ func (s *RefreshToken) GenerateRefreshToken(id int64) (string, error) {
 	}
 
 	expiresAt := time.Now().Add(7 * 24 * time.Hour)
-	err = s.refreshTokenStorage.RefreshStore(id, signed, expiresAt)
+	err = s.refreshTokenStorage.RefreshStore(ctx, id, signed, expiresAt)
 	return signed, err
 }
 
-func (s *RefreshToken) UserRefresh(refreshToken string) (domain.TokenResponse, error) {
-	userID, err := s.refreshTokenStorage.RefreshGet(refreshToken)
+func (s *RefreshToken) UserRefresh(ctx context.Context, refreshToken string) (domain.TokenResponse, error) {
+	userID, err := s.refreshTokenStorage.RefreshGet(ctx, refreshToken)
 	if err != nil {
 		return domain.TokenResponse{}, errors.New("Invalid refresh token")
 	}
@@ -55,11 +56,11 @@ func (s *RefreshToken) UserRefresh(refreshToken string) (domain.TokenResponse, e
 	if err != nil {
 		return domain.TokenResponse{}, err
 	}
-	newRefreshToken, err := s.GenerateRefreshToken(userID)
+	newRefreshToken, err := s.GenerateRefreshToken(ctx, userID)
 	if err != nil {
 		return domain.TokenResponse{}, err
 	}
-	s.refreshTokenStorage.RefreshDelete(refreshToken)
+	s.refreshTokenStorage.RefreshDelete(ctx, refreshToken)
 
 	return domain.TokenResponse{AccessToken: accessToken, RefreshToken: newRefreshToken}, nil
 }
@@ -73,6 +74,6 @@ func (s *RefreshToken) GenerateAccessToken(id int64) (string, error) {
 	return token.SignedString([]byte(s.jwtSecret))
 }
 
-func (s *RefreshToken) DeleteRefreshTokensByUserID(userID int64) error {
-	return s.refreshTokenStorage.RefreshDeleteByUserID(userID)
+func (s *RefreshToken) DeleteRefreshTokensByUserID(ctx context.Context, userID int64) error {
+	return s.refreshTokenStorage.RefreshDeleteByUserID(ctx, userID)
 }

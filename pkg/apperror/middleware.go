@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"krampus/internal/user/domain"
 	"krampus/internal/user/storage"
+	"krampus/pkg/types"
 	"net/http"
 	"strings"
 	"time"
@@ -61,6 +62,7 @@ func CORSMiddleware() gin.HandlerFunc {
 // AuthMiddleware — умная авторизация (Redis + JWT)
 func AuthMiddleware(redisStorage storage.RedisSessionStorage, jwtSecret string) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		ctx := c.Request.Context()
 		authHeader := c.GetHeader("Authorization")
 
 		// Проверка формата Bearer
@@ -73,8 +75,8 @@ func AuthMiddleware(redisStorage storage.RedisSessionStorage, jwtSecret string) 
 		tokenString := authHeader[7:]
 
 		// 1. Пытаемся взять из кэша Redis
-		if any(redisStorage) != nil { // Измените на это
-			if session, err := redisStorage.GetAccessToken(tokenString); err == nil {
+		if any(redisStorage) != nil {
+			if session, err := redisStorage.GetAccessToken(ctx, types.SessionIDFromString(tokenString)); err == nil {
 				c.Set("user_id", fmt.Sprintf("%d", session.UserID))
 				c.Next()
 				return
@@ -111,8 +113,8 @@ func AuthMiddleware(redisStorage storage.RedisSessionStorage, jwtSecret string) 
 		userIDStr := fmt.Sprintf("%d", userID)
 
 		// 3. Кэшируем результат для следующих запросов
-		if any(redisStorage) != nil { // И здесь тоже
-			_ = redisStorage.SetAccessToken(tokenString, domain.CachedSession{
+		if any(redisStorage) != nil {
+			_ = redisStorage.SetAccessToken(ctx, tokenString, domain.CachedSession{
 				UserID:    userID,
 				ExpiresAt: time.Now().Add(15 * time.Minute),
 			})

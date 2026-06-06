@@ -1,6 +1,7 @@
 package adapters
 
 import (
+	"context"
 	"krampus/internal/user/domain"
 	"krampus/pkg/logging"
 	"net/http"
@@ -9,9 +10,8 @@ import (
 )
 
 type TwoFAService interface {
-	VerifyCode(code domain.Code) (domain.TokenResponse, error)
-	EnableTwoFA(userID int64) error
-	// DisableTwoFA(userID int64, passqord string) error
+	VerifyCode(ctx context.Context, code domain.Code) (domain.TokenResponse, error)
+	EnableTwoFA(ctx context.Context, userID int64) error
 }
 
 type twoFAHandler struct {
@@ -29,7 +29,6 @@ func NewTwoFAHandler(s TwoFAService, l *logging.Logger) *twoFAHandler {
 func (h *twoFAHandler) RegisterRoutes(rg *gin.RouterGroup) {
 	rg.POST("/verify", h.VerifyCode)
 	rg.POST("/enable", h.EnableTwoFA)
-	// rg.POST("/disable", h.DisableTwoFA) // раскомментируйте, когда метод будет готов
 }
 
 func (h *twoFAHandler) VerifyCode(c *gin.Context) {
@@ -42,7 +41,7 @@ func (h *twoFAHandler) VerifyCode(c *gin.Context) {
 		return
 	}
 
-	tokenRes, err := h.twoFAService.VerifyCode(code)
+	tokenRes, err := h.twoFAService.VerifyCode(c.Request.Context(), code)
 	if err != nil {
 		h.logger.Error("Failed to verify code: " + err.Error())
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -63,7 +62,7 @@ func (h *twoFAHandler) EnableTwoFA(c *gin.Context) {
 		return
 	}
 
-	err := h.twoFAService.EnableTwoFA(userID.(int64))
+	err := h.twoFAService.EnableTwoFA(c.Request.Context(), userID.(int64))
 	if err != nil {
 		h.logger.Error("Failed to enable 2FA: " + err.Error())
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -76,35 +75,3 @@ func (h *twoFAHandler) EnableTwoFA(c *gin.Context) {
 		"success": true,
 	})
 }
-
-// func (h *twoFAHandler) DisableTwoFA(c *gin.Context) {
-// 	userID, exists := c.Get("userID")
-// 	if !exists {
-// 		c.JSON(http.StatusBadRequest, gin.H{
-// 			"error": "Unauthorized",
-// 		})
-// 		return
-// 	}
-
-// 	var req domain.TwoFaToggleRequest
-// 	if err := c.ShouldBindJSON(&req); err != nil {
-// 		h.logger.Error("Failed to bind JSON: " + err.Error())
-// 		c.JSON(http.StatusBadRequest, gin.H{
-// 			"error": "Invalid request body",
-// 		})
-// 		return
-// 	}
-
-// 	err := h.twoFAService.DisableTwoFA(userID.(int64), req.Password)
-// 	if err != nil {
-// 		h.logger.Error("Failed to enable 2FA: " + err.Error())
-// 		c.JSON(http.StatusBadRequest, gin.H{
-// 			"error": "Failed to enable 2FA",
-// 		})
-// 		return
-// 	}
-
-// 	c.JSON(http.StatusOK, gin.H{
-// 		"success": true,
-// 	})
-// }

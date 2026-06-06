@@ -23,7 +23,7 @@ func NewRedisSessionStorage(client *redis.Client) *RedisSessionStorage {
 	}
 }
 
-func (s *RedisSessionStorage) SetAccessToken(token string, session domain.CachedSession) error {
+func (s *RedisSessionStorage) SetAccessToken(ctx context.Context, token string, session domain.CachedSession) error {
 	key := fmt.Sprintf("access: %s", token)
 
 	data, err := json.Marshal(session)
@@ -32,13 +32,13 @@ func (s *RedisSessionStorage) SetAccessToken(token string, session domain.Cached
 	}
 
 	ttl := time.Until(session.ExpiresAt)
-	return s.client.Set(context.Background(), key, data, ttl).Err()
+	return s.client.Set(ctx, key, data, ttl).Err()
 }
 
-func (s *RedisSessionStorage) GetAccessToken(token types.SessionID) (domain.CachedSession, error) {
+func (s *RedisSessionStorage) GetAccessToken(ctx context.Context, token types.SessionID) (domain.CachedSession, error) {
 	key := fmt.Sprintf("access: %s", token)
 
-	data, err := s.client.Get(context.Background(), key).Result()
+	data, err := s.client.Get(ctx, key).Result()
 	if err == redis.Nil {
 		return domain.CachedSession{}, fmt.Errorf("token not found")
 	}
@@ -52,21 +52,21 @@ func (s *RedisSessionStorage) GetAccessToken(token types.SessionID) (domain.Cach
 	}
 
 	if time.Now().After(session.ExpiresAt) {
-		s.client.Del(context.Background(), key)
+		s.client.Del(ctx, key)
 		return domain.CachedSession{}, fmt.Errorf("token expired")
 	}
 
 	return session, nil
 }
 
-func (s *RedisSessionStorage) DeleteAccessToken(token string) error {
+func (s *RedisSessionStorage) DeleteAccessToken(ctx context.Context, token string) error {
 	key := fmt.Sprintf("access: %s", token)
-	return s.client.Del(context.Background(), key).Err()
+	return s.client.Del(ctx, key).Err()
 }
 
-func (s *RedisSessionStorage) GetSessionByUserID(userID int64) (domain.CachedTempToken, error) {
+func (s *RedisSessionStorage) GetSessionByUserID(ctx context.Context, userID int64) (domain.CachedTempToken, error) {
 	key := fmt.Sprintf("session:%d", userID)
-	data, err := s.client.Get(context.Background(), key).Result()
+	data, err := s.client.Get(ctx, key).Result()
 	if err == redis.Nil {
 		return domain.CachedTempToken{}, fmt.Errorf("temp token not found")
 	}
@@ -79,27 +79,27 @@ func (s *RedisSessionStorage) GetSessionByUserID(userID int64) (domain.CachedTem
 	return tempToken, nil
 }
 
-func (s *RedisSessionStorage) DeleteSessionByUserID(userID int64) error {
+func (s *RedisSessionStorage) DeleteSessionByUserID(ctx context.Context, userID int64) error {
 	key := fmt.Sprintf("session:%d", userID)
-	return s.client.Del(context.Background(), key).Err()
+	return s.client.Del(ctx, key).Err()
 }
 
-func (s *RedisSessionStorage) SetSessionByUserID(userID int64, session domain.CachedSession) error {
+func (s *RedisSessionStorage) SetSessionByUserID(ctx context.Context, userID int64, session domain.CachedSession) error {
 	key := fmt.Sprintf("session:%d", userID)
 	data, _ := json.Marshal(session)
-	return s.client.Set(context.Background(), key, data, 7*24*time.Hour).Err()
+	return s.client.Set(ctx, key, data, 7*24*time.Hour).Err()
 }
 
-func (s *RedisSessionStorage) SetTempToken(token string, temp domain.CachedTempToken) error {
+func (s *RedisSessionStorage) SetTempToken(ctx context.Context, token string, temp domain.CachedTempToken) error {
 	key := fmt.Sprintf("temp:%s", token)
 	data, _ := json.Marshal(temp)
 	ttl := time.Until(temp.ExpiresAt)
-	return s.client.Set(context.Background(), key, data, ttl).Err()
+	return s.client.Set(ctx, key, data, ttl).Err()
 }
 
-func (s *RedisSessionStorage) GetTempToken(token string) (domain.CachedTempToken, error) {
+func (s *RedisSessionStorage) GetTempToken(ctx context.Context, token string) (domain.CachedTempToken, error) {
 	key := fmt.Sprintf("temp:%s", token)
-	data, err := s.client.Get(context.Background(), key).Result()
+	data, err := s.client.Get(ctx, key).Result()
 	if err == redis.Nil {
 		return domain.CachedTempToken{}, fmt.Errorf("temp token not found")
 	}
@@ -116,7 +116,7 @@ func (s *RedisSessionStorage) GetTempToken(token string) (domain.CachedTempToken
 }
 
 func (r *RedisSessionStorage) ValidateSession(ctx context.Context, sessionID types.SessionID, userID types.UserID) error {
-	session, err := r.GetAccessToken(sessionID)
+	session, err := r.GetAccessToken(ctx, sessionID)
 
 	if err != nil {
 		return err
@@ -134,6 +134,5 @@ func (r *RedisSessionStorage) ValidateSession(ctx context.Context, sessionID typ
 }
 
 func (s *RedisSessionStorage) RedisSessionStorage() {
-	// Оставляем пустым, если реальная логика не требуется,
-	// но метод нужен для реализации интерфейса
+	// marker method for interface compliance
 }

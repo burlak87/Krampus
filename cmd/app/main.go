@@ -6,20 +6,35 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	// Registers the "pgx" database/sql driver used by sql.Open below.
+	_ "github.com/jackc/pgx/v5/stdlib"
+
+	callAdapters "krampus/internal/call/adapters"
+	callService "krampus/internal/call/service"
+	callStorage "krampus/internal/call/storage"
 
 	authRest "krampus/internal/auth/adapters"
 	authService "krampus/internal/auth/service"
 	authStorage "krampus/internal/auth/storage"
 
-	audit "krampus/internal/audit"
+	auditSvc "krampus/internal/audit/service"
 
 	chatAdapters "krampus/internal/chat/adapters"
+	filesService "krampus/internal/files/service"
+	filesWorkers "krampus/internal/files/workers"
+	filesStorage "krampus/internal/files/storage"
+	mediaStorage "krampus/internal/media/storage"
+	mediaSvc "krampus/internal/media/service"
+	"krampus/internal/profile/avatar"
 	chatService "krampus/internal/chat/service"
 	chatStorage "krampus/internal/chat/storage"
+
+	eventsSvc "krampus/internal/events/service"
 
 	identityService "krampus/internal/identity/service"
 
@@ -27,13 +42,22 @@ import (
 	messageService "krampus/internal/message/service"
 	messageStorage "krampus/internal/message/storage"
 
-	"krampus/internal/moderation"
-	"krampus/internal/polls"
-	"krampus/internal/reactions"
-	"krampus/internal/retention"
-	"krampus/internal/search"
-	"krampus/internal/stickers"
-	"krampus/internal/sync"
+	moderationService "krampus/internal/moderation/service"
+	moderationStorage "krampus/internal/moderation/storage"
+	notifProviders "krampus/internal/notifications/providers"
+	notifService "krampus/internal/notifications/service"
+	"krampus/internal/permissions"
+	pollsService "krampus/internal/polls/service"
+	pollsWorkers "krampus/internal/polls/workers"
+	reactionsService "krampus/internal/reactions/service"
+	retentionSvc "krampus/internal/retention/service"
+	retentionStorage "krampus/internal/retention/storage"
+	retentionWorkers "krampus/internal/retention/workers"
+	searchSvc "krampus/internal/search/service"
+	stickersService "krampus/internal/stickers/service"
+	syncSvc "krampus/internal/sync/service"
+
+	supervisor "krampus/internal/platform/supervisor"
 
 	sqlc "krampus/internal/sqlc"
 
@@ -65,7 +89,16 @@ func main() {
 
 	overrideConfigFromEnv(cfg)
 
-	gin.SetMode(cfg.Env)
+	// Map the app environment to a valid Gin mode (Gin only accepts
+	// debug/release/test, not "development"/"production").
+	switch cfg.Env {
+	case "production", "prod", gin.ReleaseMode:
+		gin.SetMode(gin.ReleaseMode)
+	case gin.TestMode:
+		gin.SetMode(gin.TestMode)
+	default:
+		gin.SetMode(gin.DebugMode)
+	}
 
 	// -------------------------------------------------------------------------
 	// DATABASES
@@ -89,10 +122,10 @@ func main() {
 		logger.Fatalf("redis init failed: %v", err)
 	}
 
-	sqlDB, err := sql.Open(
-		"postgres",
-		cfg.PostgresDSN,
-	)
+	sqlDB, err := sql.Open("pgx", cfg.PostgresDSN)
+	if err != nil {
+		logger.Fatalf("sql.DB open failed: %v", err)
+	}
 
 	// -------------------------------------------------------------------------
 	// KAFKA
@@ -179,18 +212,26 @@ func main() {
 		roomSvc,
 	)
 
-	_ = fileStorage
-
 	messagePG := messageStorage.NewMessagePGStorage(pool, queries)
+
+	outboxRepo := messageStorage.NewOutboxRepositoryPsql(pool)
+	idempotencyRepo := messageStorage.NewIdempotencyRepositoryPsql(pool)
+	retryRepo := messageStorage.NewPSQLRetryRepository(queries)
+	dlqRepo := messageStorage.NewPSQLDLQRepository(queries)
+	deliveryRepo := messageStorage.NewPSQLDeliveryStatusRepository(queries)
+	replayRepo := messageStorage.NewPSQLReplayRepository(queries)
 
 	messageSvc := messageService.NewMessageService(
 		messagePG,
 		producer,
 		roomSvc,
 		userClientSvc,
-		messagePG,
-		messagePG,
+		outboxRepo,
+		idempotencyRepo,
 	)
+
+	// Wire file-backed secondary store (Phase 10)
+	messageSvc.SetFileStore(fileStorage)
 
 	// -------------------------------------------------------------------------
 	// IDENTITY + WS AUTH
@@ -205,59 +246,162 @@ func main() {
 	)
 
 	// -------------------------------------------------------------------------
-	// OPTIONAL / BACKGROUND MODULES
+	// EVENT INFRASTRUCTURE
 	// -------------------------------------------------------------------------
 
-	// moderation
-	_ = moderation.NewRepository(sqlDB)
-	moderationTools := moderation.NewTools(sqlDB)
-	moderationProjection := &moderation.Projection{}
+	eventBus := eventsSvc.NewBus()
+	checkpointRepo := eventsSvc.NewCheckpointRepository(sqlDB)
+	ownership := eventsSvc.NewOwnership(sqlDB)
+	eventCoordinator := eventsSvc.NewCoordinator(ownership, cfg.NodeID, 4)
 
-	_ = moderationTools
-	_ = moderationProjection
+	// The event-sourcing coordinator continuously acquires partition leases in
+	// event_partition_leases. That table isn't in the base schema yet, so the
+	// worker is opt-in to avoid spamming logs with "relation does not exist".
+	// Set EVENTS_ENABLED=true once the event-sourcing schema is provisioned.
+	if os.Getenv("EVENTS_ENABLED") == "true" {
+		go supervisor.RunWorker(ctx, "event-coordinator", eventCoordinator.Start)
+	} else {
+		logger.Infoln("event-coordinator disabled (set EVENTS_ENABLED=true to enable)")
+	}
 
-	// polls
-	_ = polls.NewService(sqlDB)
-	pollProjection := polls.NewProjection(sqlDB)
-	pollClosingWorker := polls.NewClosingWorker(sqlDB)
+	// -------------------------------------------------------------------------
+	// AUDIT CONSUMER
+	// -------------------------------------------------------------------------
 
-	_ = pollProjection
-	go pollClosingWorker.Start(ctx)
+	auditConsumer := auditSvc.NewConsumer(sqlDB)
+	eventBus.Subscribe("message_created", auditConsumer)
+	eventBus.Subscribe("moderation_action_created", auditConsumer)
+	eventBus.Subscribe("poll_vote_cast", auditConsumer)
+	eventBus.Subscribe("reaction_added", auditConsumer)
 
-	// reactions
-	reactionService := reactions.NewService(sqlDB)
-	_ = reactionService
+	auditProjector := eventsSvc.NewProjector([]eventsSvc.Projection{auditConsumer})
+	auditEventConsumer := eventsSvc.NewConsumer(sqlDB, auditProjector, checkpointRepo, "audit", 100)
+	go supervisor.RunWorker(ctx, "audit-consumer", auditEventConsumer.Start)
 
-	// stickers
-	stickerService := stickers.NewService(sqlDB)
-	_ = stickerService
+	// -------------------------------------------------------------------------
+	// SEARCH CONSUMER
+	// -------------------------------------------------------------------------
 
-	// retention
-	_ = retention.NewRepository(sqlDB)
-	retentionExecutor := retention.NewExecutor(sqlDB)
-	retentionWorker := retention.NewWorker(sqlDB)
+	searchIndexer := searchSvc.NewIndexer(sqlDB)
+	searchConsumer := searchSvc.NewConsumer(searchIndexer)
 
-	go retentionWorker.Start(ctx)
+	eventBus.Subscribe("message_created", searchConsumer)
 
-	// sync
-	syncService := sync.NewService(sqlDB)
-	_ = syncService
+	searchProjector := eventsSvc.NewProjector([]eventsSvc.Projection{searchConsumer})
+	searchEventConsumer := eventsSvc.NewConsumer(sqlDB, searchProjector, checkpointRepo, "search", 100)
+	go supervisor.RunWorker(ctx, "search-consumer", searchEventConsumer.Start)
 
-	// notifications
-	// fcmProvider := notificationProviders.NewFCMProvider()
-	// notificationSvc := notificationService.New(fcmProvider)
+	// -------------------------------------------------------------------------
+	// MODERATION
+	// -------------------------------------------------------------------------
 
-	// search
-	searchIndexer := search.NewIndexer(sqlDB)
+	moderationRepo := moderationStorage.NewRepository(sqlDB)
+	_ = moderationRepo
+	moderationTools := moderationService.NewTools(sqlDB)
+	shadowRepo := moderationStorage.NewShadowRepository(sqlDB)
+	deliverySuppressor := moderationService.NewDeliverySuppressor(shadowRepo)
+	moderationProjection := &moderationService.Projection{}
 
-	searchConsumer := search.NewConsumer(
-		searchIndexer,
-	)
+	eventBus.Subscribe("moderation_action_created", moderationProjection)
 
-	// audit
-	auditConsumer := audit.NewConsumer(sqlDB)
+	// -------------------------------------------------------------------------
+	// PERMISSIONS
+	// -------------------------------------------------------------------------
 
-	// events
+	permissionsRepo := permissions.NewPostgresRepository(sqlDB)
+	permissionsSvc := permissions.NewService(permissionsRepo)
+
+	// -------------------------------------------------------------------------
+	// POLLS
+	// -------------------------------------------------------------------------
+
+	pollsSvc := pollsService.NewService(sqlDB)
+	pollProjection := pollsService.NewProjection(sqlDB)
+	pollClosingWorker := pollsWorkers.NewClosingWorker(sqlDB)
+
+	go supervisor.RunWorker(ctx, "poll-closing-worker", pollClosingWorker.Start)
+
+	// -------------------------------------------------------------------------
+	// REACTIONS / STICKERS
+	// -------------------------------------------------------------------------
+
+	reactionService := reactionsService.NewService(sqlDB)
+	stickerService := stickersService.NewService(sqlDB)
+
+	// -------------------------------------------------------------------------
+	// RETENTION
+	// -------------------------------------------------------------------------
+
+	retentionRepo := retentionStorage.NewRepository(sqlDB)
+	retentionExecutor := retentionSvc.NewExecutor(sqlDB)
+	retentionWorker := retentionWorkers.NewWorker(sqlDB)
+
+	go supervisor.RunWorker(ctx, "retention-worker", retentionWorker.Start)
+
+	go supervisor.RunWorker(ctx, "retention-policy-executor", func(workerCtx context.Context) {
+		ticker := time.NewTicker(12 * time.Hour)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-workerCtx.Done():
+				return
+			case <-ticker.C:
+				policies, err := retentionRepo.GetPolicies(workerCtx)
+				if err != nil {
+					logger.Errorf("retention policy fetch failed: %v", err)
+					continue
+				}
+				for _, p := range policies {
+					if err := retentionExecutor.Execute(workerCtx, p); err != nil {
+						logger.Errorf("retention execute policy=%s err=%v", p.MediaType, err)
+					}
+				}
+			}
+		}
+	})
+
+	// -------------------------------------------------------------------------
+	// SYNC SERVICE
+	// -------------------------------------------------------------------------
+
+	syncService := syncSvc.NewService(sqlDB)
+
+	// -------------------------------------------------------------------------
+	// MEDIA / AVATAR
+	// -------------------------------------------------------------------------
+
+	s3Client, err := filesStorage.NewS3Client(ctx, cfg)
+	if err != nil {
+		logger.Fatalf("s3 client init failed: %v", err)
+	}
+
+	s3Store := filesStorage.NewS3Storage(s3Client, cfg.S3.Bucket)
+	mediaRepo := mediaStorage.New(sqlDB)
+	mediaService := mediaSvc.New(s3Store, mediaRepo, nil, nil)
+
+	avatarRepo := avatar.NewRepository(sqlDB)
+	avatarSvc := avatar.New(mediaService, avatarRepo)
+
+	// -------------------------------------------------------------------------
+	// PUSH NOTIFICATIONS
+	// -------------------------------------------------------------------------
+
+	fcmProvider := notifProviders.NewFCMProvider()
+	notificationSvc := notifService.New(fcmProvider)
+	_ = notificationSvc
+
+	// -------------------------------------------------------------------------
+	// UPLOAD BACKGROUND WORKERS
+	// -------------------------------------------------------------------------
+
+	uploadRepo := filesService.NewRepository(sqlDB)
+	objectStore := filesStorage.NewS3Storage(s3Client, cfg.S3.Bucket)
+	integrityVerifier := filesService.NewIntegrityVerifier(objectStore)
+	resumeVerifier := filesService.NewResumeVerifier(objectStore)
+
+	go supervisor.RunWorker(ctx, "upload-cleanup", filesWorkers.NewCleanupWorker(sqlDB).Start)
+	go supervisor.RunWorker(ctx, "upload-integrity", filesWorkers.NewIntegrityWorker(uploadRepo, integrityVerifier).Start)
+	go supervisor.RunWorker(ctx, "upload-repair", filesWorkers.NewRepairWorker(uploadRepo, resumeVerifier).Start)
 
 	// -------------------------------------------------------------------------
 	// ROUTERS + WEBSOCKET
@@ -266,9 +410,18 @@ func main() {
 	chatRouter := chatAdapters.NewRouter(
 		sessionRedis,
 		roomSvc,
-		userSvc,
+		userClientSvc,
 		messageSvc,
 		cfg,
+		pollsSvc,
+		pollProjection,
+		reactionService,
+		stickerService,
+		searchIndexer,
+		syncService,
+		moderationTools,
+		permissionsSvc,
+		avatarSvc,
 	)
 
 	wsServer := messageAdapters.NewWebSocketServer(
@@ -276,11 +429,43 @@ func main() {
 		cfg,
 		kafkaConsumer,
 		wsAuthSvc,
-		messagePG,
-		messagePG,
-		messagePG,
-		messagePG,
+		retryRepo,
+		dlqRepo,
+		deliveryRepo,
+		replayRepo,
 	)
+
+	// Install shadow-ban suppressor on the shared connection manager.
+	wsServer.Manager().SetSuppressor(deliverySuppressor.AllowBroadcast)
+
+	// SSE server shares the same ConnectionManager.
+	sseServer := messageAdapters.NewSSEServer(
+		wsAuthSvc,
+		wsServer.Manager(),
+		replayRepo,
+	)
+
+	// -------------------------------------------------------------------------
+	// CALL / WEBRTC SIGNALING SERVER
+	// -------------------------------------------------------------------------
+
+	callPresence := callStorage.NewRedisPresence(
+		redisWrapper.RDB(),
+		cfg.Call.PresenceTTL,
+	)
+
+	crossNode := callService.NewRedisCrossNode(redisWrapper.RDB(), cfg.NodeID)
+	callHub := callService.NewHub(callPresence, crossNode, cfg.Call.MaxPeers)
+	go crossNode.Run(ctx, callHub)
+
+	callWSServer := callAdapters.NewCallWSServer(callHub, wsAuthSvc)
+
+	iceHandler := callAdapters.NewICEHandler(callAdapters.ICEConfig{
+		StunServers: cfg.Call.StunServers,
+		TurnURL:     cfg.Call.TurnURL,
+		TurnUser:    cfg.Call.TurnUser,
+		TurnPass:    cfg.Call.TurnPass,
+	})
 
 	// -------------------------------------------------------------------------
 	// HTTP SERVER
@@ -311,6 +496,7 @@ func main() {
 		)
 		{
 			chatRouter.RegisterRoutes(chatGroup)
+			chatGroup.GET("/call/ice-servers", iceHandler.Handle)
 		}
 	}
 
@@ -318,8 +504,23 @@ func main() {
 		wsServer.HandleWebSocket(c.Writer, c.Request)
 	})
 
+	engine.GET("/sse", func(c *gin.Context) {
+		sseServer.HandleSSE(c.Writer, c.Request)
+	})
+
+	engine.GET("/call/ws", func(c *gin.Context) {
+		callWSServer.HandleCallWebSocket(c.Writer, c.Request)
+	})
+
+	// HTTP_PORT may arrive as ":8080" or "8080"; normalize to a single leading
+	// colon so we don't produce "::8080" ("too many colons in address").
+	addr := cfg.HTTPPort
+	if !strings.HasPrefix(addr, ":") {
+		addr = ":" + addr
+	}
+
 	srv := &http.Server{
-		Addr:              ":" + cfg.HTTPPort,
+		Addr:              addr,
 		Handler:           engine,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      15 * time.Second,
@@ -328,8 +529,7 @@ func main() {
 	}
 
 	go func() {
-		logger.Infof("HTTP server started on :%s", cfg.HTTPPort)
-
+		logger.Infof("HTTP server started on %s", addr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			logger.Fatalf("server failed: %v", err)
 		}
@@ -340,21 +540,12 @@ func main() {
 	// -------------------------------------------------------------------------
 
 	quit := make(chan os.Signal, 1)
-
-	signal.Notify(
-		quit,
-		syscall.SIGINT,
-		syscall.SIGTERM,
-	)
-
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
 	logger.Warnln("shutdown signal received")
 
-	shutdownCtx, shutdownCancel := context.WithTimeout(
-		context.Background(),
-		15*time.Second,
-	)
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer shutdownCancel()
 
 	if err := srv.Shutdown(shutdownCtx); err != nil {
@@ -388,3 +579,4 @@ func getJWTSecret() string {
 
 	return "my-super-secret-key-change-in-prod"
 }
+

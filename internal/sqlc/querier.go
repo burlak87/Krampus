@@ -40,6 +40,7 @@ type Querier interface {
 	GetUserByEmail(ctx context.Context, email string) (GetUserByEmailRow, error)
 	GetUserByID(ctx context.Context, id int64) (GetUserByIDRow, error)
 	ListUserRooms(ctx context.Context, dollar_1 []byte) ([]Room, error)
+	ListUsers(ctx context.Context, arg ListUsersParams) ([]ListUsersRow, error)
 	MarkTwoFaCodeAsUsed(ctx context.Context, id int64) error
 	RefreshDeleteByUserI(ctx context.Context, userID int64) error
 	RefreshDeleteByUserID(ctx context.Context, userID int64) error
@@ -48,6 +49,7 @@ type Querier interface {
 	SearchMessages(ctx context.Context, arg SearchMessagesParams) ([]Message, error)
 	SoftDelete(ctx context.Context, id string) error
 	UpdatePasswordHash(ctx context.Context, arg UpdatePasswordHashParams) error
+	UpdateProfile(ctx context.Context, arg UpdateProfileParams) error
 	UpdateRoom(ctx context.Context, arg UpdateRoomParams) error
 	UpdateTwoFAStatus(ctx context.Context, arg UpdateTwoFAStatusParams) error
 	UpdateTwoFaCodeAttempts(ctx context.Context, arg UpdateTwoFaCodeAttemptsParams) error

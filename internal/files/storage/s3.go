@@ -102,3 +102,16 @@ func (s *S3Storage) Exists(
 
 	return true, nil
 }
+
+// PutObject / GetObject / DeleteObject satisfy the upload.ObjectStorage interface.
+func (s *S3Storage) PutObject(ctx context.Context, key string, data []byte) error {
+	return s.Upload(ctx, key, data)
+}
+
+func (s *S3Storage) GetObject(ctx context.Context, key string) ([]byte, error) {
+	return s.Download(ctx, key)
+}
+
+func (s *S3Storage) DeleteObject(ctx context.Context, key string) error {
+	return s.Delete(ctx, key)
+}

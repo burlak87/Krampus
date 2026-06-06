@@ -38,6 +38,30 @@ func (s *UserClientPGStorage) GetUserClient(ctx context.Context, id string) (*do
 	}, nil
 }
 
+func (s *UserClientPGStorage) ListUsers(ctx context.Context, limit, offset int) ([]*domain.User, error) {
+	rows, err := s.queries.ListUsers(ctx, database.ListUsersParams{
+		Limit:  int32(limit),
+		Offset: int32(offset),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	users := make([]*domain.User, 0, len(rows))
+	for _, row := range rows {
+		users = append(users, &domain.User{
+			ID:           row.ID,
+			Username:     row.Username,
+			Firstname:    row.Firstname,
+			Lastname:     row.Lastname,
+			Email:        row.Email,
+			TwoFAEnabled: row.TwoFaEnabled.Bool,
+			LastActive:   row.CreatedAt.Time.UnixNano(),
+		})
+	}
+	return users, nil
+}
+
 func (s *UserClientPGStorage) UpdateLastActivity(ctx context.Context, userID string, timestamp int64) error {
 	idInt, err := strconv.ParseInt(userID, 10, 64)
 	if err != nil {

@@ -21,7 +21,7 @@ func NewPSQLReplayRepository(
 	}
 }
 
-func (r *PSQLReplayRepository) GetMessagesAfter(
+func (r *PSQLReplayRepository) GetMessagesAfterSequence(
 	ctx context.Context,
 	roomID types.RoomID,
 	after int64,

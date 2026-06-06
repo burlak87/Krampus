@@ -56,6 +56,7 @@ type ConnectionManager struct {
 	dlqRepo       service.DLQRepository
 	deliveryRepo  DeliveryStatusRepository
 	sequencer     *EventSequencer
+	suppressorFn  func(ctx context.Context, userID string) bool
 }
 
 type UserConnections struct {
@@ -128,6 +129,12 @@ func NewConnectionManager(
 	return m
 }
 
+// SetSuppressor installs a shadow-ban check; when fn returns false the
+// message is silently dropped for that sender.
+func (m *ConnectionManager) SetSuppressor(fn func(ctx context.Context, userID string) bool) {
+	m.suppressorFn = fn
+}
+
 func (m *ConnectionManager) Register(
 	client TransportClient,
 ) error {
@@ -195,6 +202,10 @@ func (m *ConnectionManager) RouteMessage(
 	ctx context.Context,
 	msg *message.BaseMessage,
 ) error {
+
+	if m.suppressorFn != nil && !m.suppressorFn(ctx, msg.UserID.String()) {
+		return nil
+	}
 
 	if msg.Type.IsRealtimeOnly() {
 

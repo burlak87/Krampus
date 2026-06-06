@@ -30,7 +30,7 @@ func (e *UserStorageError) UserError() string {
 	return e.Message
 }
 
-func (s *UserStorage) InsertUser(user domain.User) (int64, error) {
+func (s *UserStorage) InsertUser(ctx context.Context, user domain.User) (int64, error) {
 	params := database.CreateUserParams{
 		Username:     user.Username,
 		Firstname:    user.Firstname,
@@ -40,15 +40,15 @@ func (s *UserStorage) InsertUser(user domain.User) (int64, error) {
 		TwoFaEnabled: pgtype.Bool{Bool: user.TwoFAEnabled, Valid: true},
 	}
 
-	createdUser, err := s.queries.CreateUser(context.Background(), params)
+	createdUser, err := s.queries.CreateUser(ctx, params)
 	if err != nil {
 		return 0, err
 	}
 	return createdUser.ID, nil
 }
 
-func (s *UserStorage) SelectUserByEmail(email string) (domain.User, error) {
-	user, err := s.queries.GetUserByEmail(context.Background(), email)
+func (s *UserStorage) SelectUserByEmail(ctx context.Context, email string) (domain.User, error) {
+	user, err := s.queries.GetUserByEmail(ctx, email)
 	if err != nil {
 		return domain.User{}, err
 	}
@@ -65,10 +65,10 @@ func (s *UserStorage) SelectUserByEmail(email string) (domain.User, error) {
 	}, nil
 }
 
-func (s *UserStorage) SelectUserByID(id int64) (domain.User, error) {
-	user, err := s.queries.GetUserByID(context.Background(), id)
+func (s *UserStorage) SelectUserByID(ctx context.Context, id int64) (domain.User, error) {
+	user, err := s.queries.GetUserByID(ctx, id)
 	if err != nil {
-		return domain.User{}, nil
+		return domain.User{}, err
 	}
 
 	return domain.User{
@@ -83,7 +83,7 @@ func (s *UserStorage) SelectUserByID(id int64) (domain.User, error) {
 	}, nil
 }
 
-func (s *UserStorage) BlockUser(email, blockedUntil string) error {
+func (s *UserStorage) BlockUser(ctx context.Context, email, blockedUntil string) error {
 	var blockedUntilTime pgtype.Timestamptz
 	if blockedUntil != "" {
 		t, err := time.Parse(time.RFC3339, blockedUntil)
@@ -95,7 +95,7 @@ func (s *UserStorage) BlockUser(email, blockedUntil string) error {
 		blockedUntilTime = pgtype.Timestamptz{Valid: false}
 	}
 
-	return s.queries.BlockUser(context.Background(), database.BlockUserParams{
+	return s.queries.BlockUser(ctx, database.BlockUserParams{
 		Email:        email,
 		BlockedUntil: blockedUntilTime,
 	})

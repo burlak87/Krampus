@@ -10,14 +10,14 @@ const (
 )
 
 type Room struct {
-	ID        string
-	Type      RoomType
-	OwnerID   string
-	Name      string
-	Members   []string
-	CreatedAt int64
-	UpdatedAt int64
-	Settings  RoomSettings
+	ID        string       `json:"id"`
+	Type      RoomType     `json:"type"`
+	OwnerID   string       `json:"owner_id"`
+	Name      string       `json:"name"`
+	Members   []string     `json:"members"`
+	CreatedAt int64        `json:"created_at"`
+	UpdatedAt int64        `json:"updated_at"`
+	Settings  RoomSettings `json:"settings"`
 }
 
 type RoomMember struct {
@@ -29,11 +29,11 @@ type RoomMember struct {
 }
 
 type RoomSettings struct {
-	ReadOnly     bool
-	ModerateMsgs bool
-	AllowFiles   bool
-	MaxMembers   int
-	AutoArchive  bool
+	ReadOnly     bool `json:"read_only"`
+	ModerateMsgs bool `json:"moderate_msgs"`
+	AllowFiles   bool `json:"allow_files"`
+	MaxMembers   int  `json:"max_members"`
+	AutoArchive  bool `json:"auto_archive"`
 }
 
 type UserConnection struct {

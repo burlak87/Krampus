@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"crypto/rand"
 	"errors"
 	"fmt"
@@ -16,13 +17,13 @@ import (
 )
 
 type TwoFAStorage interface {
-	RenovationTwoFAStatus(userID int64, enabled bool) error
-	InsertTwoFaCode(userID int64, code string, expiresAt time.Time) error
-	SelectTwoFaCodeByUserID(userID int64) (domain.TwoFaCode, error)
-	RenovationTwoFaCodeAttempts(codeID int64, attempts int64) error
-	MarkTwoFaCodeUsed(codeID int64) error
-	SelectRecentCodeRequests(userID int64, since time.Time) (int64, error)
-	SelectRecentVerificationAttempts(userID int64, since time.Time) (int64, error)
+	RenovationTwoFAStatus(ctx context.Context, userID int64, enabled bool) error
+	InsertTwoFaCode(ctx context.Context, userID int64, code string, expiresAt time.Time) error
+	SelectTwoFaCodeByUserID(ctx context.Context, userID int64) (domain.TwoFaCode, error)
+	RenovationTwoFaCodeAttempts(ctx context.Context, codeID int64, attempts int64) error
+	MarkTwoFaCodeUsed(ctx context.Context, codeID int64) error
+	SelectRecentCodeRequests(ctx context.Context, userID int64, since time.Time) (int64, error)
+	SelectRecentVerificationAttempts(ctx context.Context, userID int64, since time.Time) (int64, error)
 }
 
 type TwoFA struct {
@@ -41,14 +42,14 @@ func NewTwoFA(twoFA TwoFAStorage, refreshToken *userService.RefreshToken, redisS
 	}
 }
 
-func (s *TwoFA) EnableTwoFA(userID int64) error {
-	return s.twoFAStorage.RenovationTwoFAStatus(userID, true)
+func (s *TwoFA) EnableTwoFA(ctx context.Context, userID int64) error {
+	return s.twoFAStorage.RenovationTwoFAStatus(ctx, userID, true)
 }
 
-func (s *TwoFA) UsersSendEmailCode(tempToken string) error {
+func (s *TwoFA) UsersSendEmailCode(ctx context.Context, tempToken string) error {
 	var userID int64
 
-	cachedTemp, err := s.redisStorage.GetTempToken(tempToken)
+	cachedTemp, err := s.redisStorage.GetTempToken(ctx, tempToken)
 	if err == nil && time.Now().Before(cachedTemp.ExpiresAt) {
 		userID = cachedTemp.UserID
 	} else {
@@ -62,11 +63,11 @@ func (s *TwoFA) UsersSendEmailCode(tempToken string) error {
 			CreatedAt: time.Now(),
 			ExpiresAt: time.Now().Add(10 * time.Minute),
 		}
-		s.redisStorage.SetTempToken(tempToken, tempTokenData)
+		s.redisStorage.SetTempToken(ctx, tempToken, tempTokenData)
 	}
 
 	fifteenMinutesAgo := time.Now().Add(-15 * time.Minute)
-	recentRequests, err := s.twoFAStorage.SelectRecentCodeRequests(userID, fifteenMinutesAgo)
+	recentRequests, err := s.twoFAStorage.SelectRecentCodeRequests(ctx, userID, fifteenMinutesAgo)
 	if err != nil {
 		return err
 	}
@@ -81,7 +82,7 @@ func (s *TwoFA) UsersSendEmailCode(tempToken string) error {
 	}
 
 	expiresAt := time.Now().Add(5 * time.Minute)
-	err = s.twoFAStorage.InsertTwoFaCode(userID, code, expiresAt)
+	err = s.twoFAStorage.InsertTwoFaCode(ctx, userID, code, expiresAt)
 	if err != nil {
 		return err
 	}
@@ -94,14 +95,14 @@ func (s *TwoFA) UsersSendEmailCode(tempToken string) error {
 	return nil
 }
 
-func (s *TwoFA) VerifyCode(code user.Code) (user.TokenResponse, error) {
+func (s *TwoFA) VerifyCode(ctx context.Context, code user.Code) (user.TokenResponse, error) {
 	userID, err := s.extractUserIDFromToken(code.TempToken)
 	if err != nil {
 		return user.TokenResponse{}, errors.New("invalid temp token")
 	}
 
 	tenMinuteAgo := time.Now().Add(-10 * time.Minute)
-	recentAttempts, err := s.twoFAStorage.SelectRecentVerificationAttempts(userID, tenMinuteAgo)
+	recentAttempts, err := s.twoFAStorage.SelectRecentVerificationAttempts(ctx, userID, tenMinuteAgo)
 	if err != nil {
 		return user.TokenResponse{}, err
 	}
@@ -110,7 +111,7 @@ func (s *TwoFA) VerifyCode(code user.Code) (user.TokenResponse, error) {
 		return user.TokenResponse{}, errors.New("too many verification attempts, please try again later")
 	}
 
-	twoFaCode, err := s.twoFAStorage.SelectTwoFaCodeByUserID(userID)
+	twoFaCode, err := s.twoFAStorage.SelectTwoFaCodeByUserID(ctx, userID)
 	if err != nil {
 		return user.TokenResponse{}, errors.New("invalid temp token or code not found")
 	}
@@ -128,7 +129,7 @@ func (s *TwoFA) VerifyCode(code user.Code) (user.TokenResponse, error) {
 	}
 
 	if twoFaCode.Code != code.Code {
-		err = s.twoFAStorage.RenovationTwoFaCodeAttempts(twoFaCode.ID, int64(twoFaCode.Attempts+1))
+		err = s.twoFAStorage.RenovationTwoFaCodeAttempts(ctx, twoFaCode.ID, int64(twoFaCode.Attempts+1))
 		if err != nil {
 			return user.TokenResponse{}, err
 		}
@@ -137,7 +138,7 @@ func (s *TwoFA) VerifyCode(code user.Code) (user.TokenResponse, error) {
 		return user.TokenResponse{}, fmt.Errorf("invalid code, %d attempts remaining", remainingAttempts)
 	}
 
-	err = s.twoFAStorage.MarkTwoFaCodeUsed(twoFaCode.ID)
+	err = s.twoFAStorage.MarkTwoFaCodeUsed(ctx, twoFaCode.ID)
 	if err != nil {
 		return user.TokenResponse{}, err
 	}
@@ -147,7 +148,7 @@ func (s *TwoFA) VerifyCode(code user.Code) (user.TokenResponse, error) {
 		return user.TokenResponse{}, err
 	}
 
-	refreshToken, err := s.refreshTokenService.GenerateRefreshToken(twoFaCode.UserID)
+	refreshToken, err := s.refreshTokenService.GenerateRefreshToken(ctx, twoFaCode.UserID)
 	if err != nil {
 		return user.TokenResponse{}, err
 	}

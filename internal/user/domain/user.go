@@ -17,7 +17,6 @@ type User struct {
 	Firstname    string                 `json:"firstname"`
 	Lastname     string                 `json:"lastname"`
 	Email        string                 `json:"email"`
-	Password     string                 `json:"password"`
 	PasswordHash string                 `json:"-"`
 	TwoFAEnabled bool                   `json:"two_fa_enabled"`
 	CreatedAt    time.Time              `json:"created_at"`
@@ -40,8 +39,12 @@ type LoginRequest struct {
 }
 
 type RegisterRequest struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
+	Username     string `json:"username"`
+	Firstname    string `json:"firstname"`
+	Lastname     string `json:"lastname"`
+	Email        string `json:"email"`
+	Password     string `json:"password"`
+	TwoFAEnabled bool   `json:"two_fa_enabled"`
 }
 
 type TokenResponse struct {

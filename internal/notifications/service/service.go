@@ -1,6 +1,8 @@
 package service
 
 import (
+	"context"
+
 	"krampus/internal/notifications/providers"
 )
 
@@ -15,4 +17,8 @@ func New(
 	return &Service{
 		provider: provider,
 	}
+}
+
+func (s *Service) SendPush(ctx context.Context, token, title, body string) error {
+	return s.provider.SendPush(ctx, token, title, body)
 }

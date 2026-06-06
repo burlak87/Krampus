@@ -332,14 +332,6 @@ ON events(
 CREATE INDEX idx_events_created_at
 ON events(created_at);
 
-CREATE TABLE sync_state (
-    user_id UUID NOT NULL,
-    device_id TEXT NOT NULL,
-    last_event_id BIGINT NOT NULL,
-    updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    PRIMARY KEY(user_id, device_id)
-);
-
 CREATE TABLE polls (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     message_id UUID NOT NULL,
@@ -700,6 +692,15 @@ CREATE TABLE shadow_bans (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE mutes (
+    user_id    TEXT NOT NULL,
+    room_id    TEXT,
+    muted_until TIMESTAMPTZ,
+    reason     TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (user_id)
+);
+
 CREATE TABLE sticker_packs (
     id TEXT PRIMARY KEY,
     title TEXT NOT NULL,
@@ -745,3 +746,18 @@ CREATE INDEX idx_upload_sessions_status
 ON upload_sessions(upload_status);
 CREATE INDEX idx_upload_sessions_expires
 ON upload_sessions(expires_at);
+
+CREATE TABLE media_jobs (
+    id BIGSERIAL PRIMARY KEY,
+    media_file_id TEXT NOT NULL REFERENCES media_files(id) ON DELETE CASCADE,
+    job_type TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    attempts INT NOT NULL DEFAULT 0,
+    scheduled_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    started_at TIMESTAMPTZ,
+    completed_at TIMESTAMPTZ,
+    error TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_media_jobs_status ON media_jobs(status, scheduled_at);

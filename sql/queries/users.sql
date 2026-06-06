@@ -42,6 +42,19 @@ FROM users
 WHERE id = $1
 LIMIT 1;
 
+-- name: ListUsers :many
+SELECT
+    id,
+    username,
+    firstname,
+    lastname,
+    email,
+    two_fa_enabled,
+    created_at
+FROM users
+ORDER BY username
+LIMIT $1 OFFSET $2;
+
 -- name: CreateRefreshToken :exec
 INSERT INTO refresh_tokens (user_id, token, expires_at)
 VALUES ($1, $2, $3);

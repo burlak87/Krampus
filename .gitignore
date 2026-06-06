@@ -1,4 +1,5 @@
 .claude/
+.frontend/
 .env
 *.exe
 *.exe~

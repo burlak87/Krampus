@@ -72,7 +72,7 @@ INSERT INTO users (
     two_fa_enabled
 ) VALUES (
     $1, $2, $3, $4, $5, $6
-) RETURNING id, username, firstname, lastname, email, password_hash, two_fa_enabled, created_at, updated_at, blocked_until, failed_attempts, last_failed_attempt
+) RETURNING id, username, firstname, lastname, email, password_hash, two_fa_enabled, created_at, updated_at, blocked_until, failed_attempts, last_failed_attempt, avatar
 `
 
 type CreateUserParams struct {
@@ -107,6 +107,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.BlockedUntil,
 		&i.FailedAttempts,
 		&i.LastFailedAttempt,
+		&i.Avatar,
 	)
 	return i, err
 }
@@ -287,7 +288,8 @@ SELECT
     two_fa_enabled,
     created_at,
     blocked_until,
-    failed_attempts
+    failed_attempts,
+    avatar
 FROM users
 WHERE id = $1
 LIMIT 1
@@ -304,6 +306,7 @@ type GetUserByIDRow struct {
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	BlockedUntil   pgtype.Timestamptz `json:"blocked_until"`
 	FailedAttempts pgtype.Int4        `json:"failed_attempts"`
+	Avatar         pgtype.Text        `json:"avatar"`
 }
 
 func (q *Queries) GetUserByID(ctx context.Context, id int64) (GetUserByIDRow, error) {
@@ -320,6 +323,7 @@ func (q *Queries) GetUserByID(ctx context.Context, id int64) (GetUserByIDRow, er
 		&i.CreatedAt,
 		&i.BlockedUntil,
 		&i.FailedAttempts,
+		&i.Avatar,
 	)
 	return i, err
 }
@@ -332,7 +336,8 @@ SELECT
     lastname,
     email,
     two_fa_enabled,
-    created_at
+    created_at,
+    avatar
 FROM users
 ORDER BY username
 LIMIT $1 OFFSET $2
@@ -351,6 +356,7 @@ type ListUsersRow struct {
 	Email        string             `json:"email"`
 	TwoFaEnabled pgtype.Bool        `json:"two_fa_enabled"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	Avatar       pgtype.Text        `json:"avatar"`
 }
 
 func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]ListUsersRow, error) {
@@ -370,6 +376,7 @@ func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]ListUse
 			&i.Email,
 			&i.TwoFaEnabled,
 			&i.CreatedAt,
+			&i.Avatar,
 		); err != nil {
 			return nil, err
 		}
@@ -411,6 +418,22 @@ WHERE email = $1
 
 func (q *Queries) ResetFailedAttempts(ctx context.Context, email string) error {
 	_, err := q.db.Exec(ctx, resetFailedAttempts, email)
+	return err
+}
+
+const setUserAvatar = `-- name: SetUserAvatar :exec
+UPDATE users
+SET avatar = $2
+WHERE id = $1
+`
+
+type SetUserAvatarParams struct {
+	ID     int64       `json:"id"`
+	Avatar pgtype.Text `json:"avatar"`
+}
+
+func (q *Queries) SetUserAvatar(ctx context.Context, arg SetUserAvatarParams) error {
+	_, err := q.db.Exec(ctx, setUserAvatar, arg.ID, arg.Avatar)
 	return err
 }
 

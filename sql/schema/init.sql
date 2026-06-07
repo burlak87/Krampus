@@ -10,7 +10,8 @@ CREATE TABLE users (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     blocked_until TIMESTAMP WITH TIME ZONE,
     failed_attempts INTEGER DEFAULT 0,
-    last_failed_attempt TIMESTAMP WITH TIME ZONE
+    last_failed_attempt TIMESTAMP WITH TIME ZONE,
+    avatar TEXT
 );
 
 CREATE TABLE refresh_tokens (
@@ -61,7 +62,8 @@ CREATE TABLE IF NOT EXISTS rooms (
     members    JSONB NOT NULL, -- список ID участников
     settings   JSONB NOT NULL, -- объект настроек
     created_at BIGINT NOT NULL,
-    updated_at BIGINT NOT NULL
+    updated_at BIGINT NOT NULL,
+    avatar     TEXT
 );
 
 CREATE TABLE IF NOT EXISTS messages (

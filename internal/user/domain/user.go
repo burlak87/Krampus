@@ -18,6 +18,7 @@ type User struct {
 	Lastname     string                 `json:"lastname"`
 	Email        string                 `json:"email"`
 	PasswordHash string                 `json:"-"`
+	Avatar       string                 `json:"avatar"`
 	TwoFAEnabled bool                   `json:"two_fa_enabled"`
 	CreatedAt    time.Time              `json:"created_at"`
 	LastActive   int64                  `json:"last_active"`

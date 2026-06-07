@@ -16,6 +16,7 @@ type RoomStorage interface {
 	UpdateRoom(ctx context.Context, room *domain.Room) error
 	DeleteRoom(ctx context.Context, id string) error
 	ListUserRooms(ctx context.Context, userID string) ([]*domain.Room, error)
+	ListRoomsByNamePrefix(ctx context.Context, prefix string) ([]*domain.Room, error)
 }
 
 type RoomCache interface {
@@ -70,7 +71,9 @@ func (rs *RoomService) CanSendMessage(ctx context.Context, room *domain.Room, us
 
 	switch room.Type {
 	case domain.RoomPersonal:
-		return room.OwnerID == userID
+		// 1-on-1 chat: both participants (any member) may send. Membership was
+		// already verified above.
+		return true
 	case domain.RoomPrivate:
 		return true
 	case domain.RoomGroup:
@@ -161,4 +164,8 @@ func (rs *RoomService) DeleteRoom(ctx context.Context, id string) error {
 
 func (rs *RoomService) ListUserRooms(ctx context.Context, userID string) ([]*domain.Room, error) {
 	return rs.storage.ListUserRooms(ctx, userID)
+}
+
+func (rs *RoomService) ListRoomsByNamePrefix(ctx context.Context, prefix string) ([]*domain.Room, error) {
+	return rs.storage.ListRoomsByNamePrefix(ctx, prefix)
 }

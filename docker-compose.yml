@@ -68,6 +68,18 @@ services:
     networks:
       - krampus-net
 
+  # Standalone WebRTC call-signaling server (separate Go module).
+  call:
+    build:
+      context: ./frontend/server/api
+      dockerfile: Dockerfile
+    container_name: krampus_call
+    ports:
+      - "8090:8090"
+    restart: unless-stopped
+    networks:
+      - krampus-net
+
   # Nuxt 3 dev server. NUXT_PUBLIC_* point at localhost:8080 because they are
   # consumed by the BROWSER (running on the host), which reaches the backend
   # via its published port — not over the compose network.

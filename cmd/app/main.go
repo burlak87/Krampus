@@ -11,12 +11,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	// Registers the "pgx" database/sql driver used by sql.Open below.
-	_ "github.com/jackc/pgx/v5/stdlib"
-
-	callAdapters "krampus/internal/call/adapters"
-	callService "krampus/internal/call/service"
-	callStorage "krampus/internal/call/storage"
+	_ "github.com/jackc/pgx/v5/stdlib" // database/sql driver "pgx"
 
 	authRest "krampus/internal/auth/adapters"
 	authService "krampus/internal/auth/service"
@@ -89,16 +84,7 @@ func main() {
 
 	overrideConfigFromEnv(cfg)
 
-	// Map the app environment to a valid Gin mode (Gin only accepts
-	// debug/release/test, not "development"/"production").
-	switch cfg.Env {
-	case "production", "prod", gin.ReleaseMode:
-		gin.SetMode(gin.ReleaseMode)
-	case gin.TestMode:
-		gin.SetMode(gin.TestMode)
-	default:
-		gin.SetMode(gin.DebugMode)
-	}
+	gin.SetMode(ginModeFor(cfg.Env))
 
 	// -------------------------------------------------------------------------
 	// DATABASES
@@ -249,16 +235,17 @@ func main() {
 	// EVENT INFRASTRUCTURE
 	// -------------------------------------------------------------------------
 
+	// The event-sourcing subsystem (partition leases, audit/search consumers)
+	// needs extra tables (e.g. event_partition_leases) that are not part of the
+	// base schema, so it is opt-in via EVENTS_ENABLED to avoid log spam.
+	eventsEnabled := os.Getenv("EVENTS_ENABLED") == "true"
+
 	eventBus := eventsSvc.NewBus()
 	checkpointRepo := eventsSvc.NewCheckpointRepository(sqlDB)
 	ownership := eventsSvc.NewOwnership(sqlDB)
 	eventCoordinator := eventsSvc.NewCoordinator(ownership, cfg.NodeID, 4)
 
-	// The event-sourcing coordinator continuously acquires partition leases in
-	// event_partition_leases. That table isn't in the base schema yet, so the
-	// worker is opt-in to avoid spamming logs with "relation does not exist".
-	// Set EVENTS_ENABLED=true once the event-sourcing schema is provisioned.
-	if os.Getenv("EVENTS_ENABLED") == "true" {
+	if eventsEnabled {
 		go supervisor.RunWorker(ctx, "event-coordinator", eventCoordinator.Start)
 	} else {
 		logger.Infoln("event-coordinator disabled (set EVENTS_ENABLED=true to enable)")
@@ -276,7 +263,9 @@ func main() {
 
 	auditProjector := eventsSvc.NewProjector([]eventsSvc.Projection{auditConsumer})
 	auditEventConsumer := eventsSvc.NewConsumer(sqlDB, auditProjector, checkpointRepo, "audit", 100)
-	go supervisor.RunWorker(ctx, "audit-consumer", auditEventConsumer.Start)
+	if eventsEnabled {
+		go supervisor.RunWorker(ctx, "audit-consumer", auditEventConsumer.Start)
+	}
 
 	// -------------------------------------------------------------------------
 	// SEARCH CONSUMER
@@ -289,7 +278,9 @@ func main() {
 
 	searchProjector := eventsSvc.NewProjector([]eventsSvc.Projection{searchConsumer})
 	searchEventConsumer := eventsSvc.NewConsumer(sqlDB, searchProjector, checkpointRepo, "search", 100)
-	go supervisor.RunWorker(ctx, "search-consumer", searchEventConsumer.Start)
+	if eventsEnabled {
+		go supervisor.RunWorker(ctx, "search-consumer", searchEventConsumer.Start)
+	}
 
 	// -------------------------------------------------------------------------
 	// MODERATION
@@ -446,28 +437,6 @@ func main() {
 	)
 
 	// -------------------------------------------------------------------------
-	// CALL / WEBRTC SIGNALING SERVER
-	// -------------------------------------------------------------------------
-
-	callPresence := callStorage.NewRedisPresence(
-		redisWrapper.RDB(),
-		cfg.Call.PresenceTTL,
-	)
-
-	crossNode := callService.NewRedisCrossNode(redisWrapper.RDB(), cfg.NodeID)
-	callHub := callService.NewHub(callPresence, crossNode, cfg.Call.MaxPeers)
-	go crossNode.Run(ctx, callHub)
-
-	callWSServer := callAdapters.NewCallWSServer(callHub, wsAuthSvc)
-
-	iceHandler := callAdapters.NewICEHandler(callAdapters.ICEConfig{
-		StunServers: cfg.Call.StunServers,
-		TurnURL:     cfg.Call.TurnURL,
-		TurnUser:    cfg.Call.TurnUser,
-		TurnPass:    cfg.Call.TurnPass,
-	})
-
-	// -------------------------------------------------------------------------
 	// HTTP SERVER
 	// -------------------------------------------------------------------------
 
@@ -496,7 +465,6 @@ func main() {
 		)
 		{
 			chatRouter.RegisterRoutes(chatGroup)
-			chatGroup.GET("/call/ice-servers", iceHandler.Handle)
 		}
 	}
 
@@ -508,16 +476,8 @@ func main() {
 		sseServer.HandleSSE(c.Writer, c.Request)
 	})
 
-	engine.GET("/call/ws", func(c *gin.Context) {
-		callWSServer.HandleCallWebSocket(c.Writer, c.Request)
-	})
-
-	// HTTP_PORT may arrive as ":8080" or "8080"; normalize to a single leading
-	// colon so we don't produce "::8080" ("too many colons in address").
-	addr := cfg.HTTPPort
-	if !strings.HasPrefix(addr, ":") {
-		addr = ":" + addr
-	}
+	// HTTP_PORT may or may not include a leading colon (e.g. ":8080" or "8080").
+	addr := ":" + strings.TrimPrefix(cfg.HTTPPort, ":")
 
 	srv := &http.Server{
 		Addr:              addr,
@@ -569,6 +529,19 @@ func overrideConfigFromEnv(cfg *config.Config) {
 
 	if dsn := os.Getenv("POSTGRES_DSN"); dsn != "" {
 		cfg.PostgresDSN = dsn
+	}
+}
+
+// ginModeFor maps the application environment (e.g. "development", "production")
+// to a valid Gin mode. Gin only accepts debug/release/test.
+func ginModeFor(env string) string {
+	switch env {
+	case "production", "prod", "release":
+		return gin.ReleaseMode
+	case "test", "testing":
+		return gin.TestMode
+	default:
+		return gin.DebugMode
 	}
 }
 

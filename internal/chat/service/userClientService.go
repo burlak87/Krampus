@@ -16,6 +16,7 @@ type UserClientStorage interface {
 	UpdateUserClient(ctx context.Context, user *userDomain.User) error
 	UpdateLastActivity(ctx context.Context, userID string, ts int64) error
 	ListUsers(ctx context.Context, limit, offset int) ([]*userDomain.User, error)
+	SetAvatar(ctx context.Context, userID string, avatar string) error
 }
 
 type UserClientCache interface {
@@ -38,6 +39,15 @@ func NewUserClientService(s UserClientStorage, c UserClientCache) *UserClientSer
 
 func (ucs *UserClientService) ListUsers(ctx context.Context, limit, offset int) ([]*userDomain.User, error) {
 	return ucs.storage.ListUsers(ctx, limit, offset)
+}
+
+func (ucs *UserClientService) SetAvatar(ctx context.Context, userID string, avatar string) error {
+	if err := ucs.storage.SetAvatar(ctx, userID, avatar); err != nil {
+		return err
+	}
+	// drop stale cache so the new avatar is served
+	ucs.cache.DeleteUserClient(ctx, userID)
+	return nil
 }
 
 func (ucs *UserClientService) GetUser(ctx context.Context, id string) (*userDomain.User, error) {

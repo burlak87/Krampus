@@ -37,7 +37,8 @@ SELECT
     two_fa_enabled,
     created_at,
     blocked_until,
-    failed_attempts
+    failed_attempts,
+    avatar
 FROM users
 WHERE id = $1
 LIMIT 1;
@@ -50,10 +51,16 @@ SELECT
     lastname,
     email,
     two_fa_enabled,
-    created_at
+    created_at,
+    avatar
 FROM users
 ORDER BY username
 LIMIT $1 OFFSET $2;
+
+-- name: SetUserAvatar :exec
+UPDATE users
+SET avatar = $2
+WHERE id = $1;
 
 -- name: CreateRefreshToken :exec
 INSERT INTO refresh_tokens (user_id, token, expires_at)

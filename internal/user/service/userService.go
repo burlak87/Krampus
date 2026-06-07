@@ -56,8 +56,8 @@ func NewUser(
 }
 
 func (s *User) UserRegister(ctx context.Context, req domain.RegisterRequest) (domain.User, error) {
-	if req.Username == "" || req.Firstname == "" || req.Lastname == "" || req.Email == "" {
-		return domain.User{}, errors.New("invalid input: all fields are required")
+	if req.Username == "" || req.Email == "" {
+		return domain.User{}, errors.New("invalid input: username and email are required")
 	}
 
 	if req.Password == "" || len(req.Password) < 8 {

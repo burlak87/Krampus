@@ -33,9 +33,23 @@ func (s *UserClientPGStorage) GetUserClient(ctx context.Context, id string) (*do
 	return &domain.User{
 		ID:         user.ID,
 		Username:   user.Username,
+		Firstname:  user.Firstname,
+		Lastname:   user.Lastname,
 		Email:      user.Email,
+		Avatar:     user.Avatar.String,
 		LastActive: user.CreatedAt.Time.UnixNano(),
 	}, nil
+}
+
+func (s *UserClientPGStorage) SetAvatar(ctx context.Context, userID string, avatar string) error {
+	idInt, err := strconv.ParseInt(userID, 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid user id format: %w", err)
+	}
+	return s.queries.SetUserAvatar(ctx, database.SetUserAvatarParams{
+		ID:     idInt,
+		Avatar: pgtype.Text{String: avatar, Valid: avatar != ""},
+	})
 }
 
 func (s *UserClientPGStorage) ListUsers(ctx context.Context, limit, offset int) ([]*domain.User, error) {
@@ -55,6 +69,7 @@ func (s *UserClientPGStorage) ListUsers(ctx context.Context, limit, offset int) 
 			Firstname:    row.Firstname,
 			Lastname:     row.Lastname,
 			Email:        row.Email,
+			Avatar:       row.Avatar.String,
 			TwoFAEnabled: row.TwoFaEnabled.Bool,
 			LastActive:   row.CreatedAt.Time.UnixNano(),
 		})

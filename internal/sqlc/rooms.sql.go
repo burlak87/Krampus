@@ -7,6 +7,8 @@ package database
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const deleteRoom = `-- name: DeleteRoom :exec
@@ -19,7 +21,7 @@ func (q *Queries) DeleteRoom(ctx context.Context, id string) error {
 }
 
 const getRoomByID = `-- name: GetRoomByID :one
-SELECT id, type, owner_id, name, members, settings, created_at, updated_at
+SELECT id, type, owner_id, name, members, settings, created_at, updated_at, avatar
 FROM rooms
 WHERE id = $1 LIMIT 1
 `
@@ -36,12 +38,48 @@ func (q *Queries) GetRoomByID(ctx context.Context, id string) (Room, error) {
 		&i.Settings,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Avatar,
 	)
 	return i, err
 }
 
+const listRoomsByNamePrefix = `-- name: ListRoomsByNamePrefix :many
+SELECT id, type, owner_id, name, members, settings, created_at, updated_at, avatar FROM rooms
+WHERE name LIKE $1
+`
+
+func (q *Queries) ListRoomsByNamePrefix(ctx context.Context, name string) ([]Room, error) {
+	rows, err := q.db.Query(ctx, listRoomsByNamePrefix, name)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Room{}
+	for rows.Next() {
+		var i Room
+		if err := rows.Scan(
+			&i.ID,
+			&i.Type,
+			&i.OwnerID,
+			&i.Name,
+			&i.Members,
+			&i.Settings,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Avatar,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUserRooms = `-- name: ListUserRooms :many
-SELECT id, type, owner_id, name, members, settings, created_at, updated_at FROM rooms
+SELECT id, type, owner_id, name, members, settings, created_at, updated_at, avatar FROM rooms
 WHERE members @> $1::jsonb
 `
 
@@ -63,6 +101,7 @@ func (q *Queries) ListUserRooms(ctx context.Context, dollar_1 []byte) ([]Room, e
 			&i.Settings,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Avatar,
 		); err != nil {
 			return nil, err
 		}
@@ -76,16 +115,17 @@ func (q *Queries) ListUserRooms(ctx context.Context, dollar_1 []byte) ([]Room, e
 
 const updateRoom = `-- name: UpdateRoom :exec
 UPDATE rooms
-SET name = $2, members = $3, settings = $4, updated_at = $5
+SET name = $2, members = $3, settings = $4, updated_at = $5, avatar = $6
 WHERE id = $1
 `
 
 type UpdateRoomParams struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	Members   []byte `json:"members"`
-	Settings  []byte `json:"settings"`
-	UpdatedAt int64  `json:"updated_at"`
+	ID        string      `json:"id"`
+	Name      string      `json:"name"`
+	Members   []byte      `json:"members"`
+	Settings  []byte      `json:"settings"`
+	UpdatedAt int64       `json:"updated_at"`
+	Avatar    pgtype.Text `json:"avatar"`
 }
 
 func (q *Queries) UpdateRoom(ctx context.Context, arg UpdateRoomParams) error {
@@ -95,29 +135,32 @@ func (q *Queries) UpdateRoom(ctx context.Context, arg UpdateRoomParams) error {
 		arg.Members,
 		arg.Settings,
 		arg.UpdatedAt,
+		arg.Avatar,
 	)
 	return err
 }
 
 const upsertRoom = `-- name: UpsertRoom :exec
-INSERT INTO rooms (id, type, owner_id, name, members, settings, created_at, updated_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+INSERT INTO rooms (id, type, owner_id, name, members, settings, created_at, updated_at, avatar)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 ON CONFLICT (id) DO UPDATE SET
     name = EXCLUDED.name,
     members = EXCLUDED.members,
     settings = EXCLUDED.settings,
-    updated_at = EXCLUDED.updated_at
+    updated_at = EXCLUDED.updated_at,
+    avatar = EXCLUDED.avatar
 `
 
 type UpsertRoomParams struct {
-	ID        string `json:"id"`
-	Type      string `json:"type"`
-	OwnerID   string `json:"owner_id"`
-	Name      string `json:"name"`
-	Members   []byte `json:"members"`
-	Settings  []byte `json:"settings"`
-	CreatedAt int64  `json:"created_at"`
-	UpdatedAt int64  `json:"updated_at"`
+	ID        string      `json:"id"`
+	Type      string      `json:"type"`
+	OwnerID   string      `json:"owner_id"`
+	Name      string      `json:"name"`
+	Members   []byte      `json:"members"`
+	Settings  []byte      `json:"settings"`
+	CreatedAt int64       `json:"created_at"`
+	UpdatedAt int64       `json:"updated_at"`
+	Avatar    pgtype.Text `json:"avatar"`
 }
 
 func (q *Queries) UpsertRoom(ctx context.Context, arg UpsertRoomParams) error {
@@ -130,6 +173,7 @@ func (q *Queries) UpsertRoom(ctx context.Context, arg UpsertRoomParams) error {
 		arg.Settings,
 		arg.CreatedAt,
 		arg.UpdatedAt,
+		arg.Avatar,
 	)
 	return err
 }

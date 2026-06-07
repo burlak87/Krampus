@@ -39,6 +39,7 @@ type Querier interface {
 	GetTwoFaCodeByUserID(ctx context.Context, userID int64) (TwoFaCode, error)
 	GetUserByEmail(ctx context.Context, email string) (GetUserByEmailRow, error)
 	GetUserByID(ctx context.Context, id int64) (GetUserByIDRow, error)
+	ListRoomsByNamePrefix(ctx context.Context, name string) ([]Room, error)
 	ListUserRooms(ctx context.Context, dollar_1 []byte) ([]Room, error)
 	ListUsers(ctx context.Context, arg ListUsersParams) ([]ListUsersRow, error)
 	MarkTwoFaCodeAsUsed(ctx context.Context, id int64) error
@@ -47,6 +48,7 @@ type Querier interface {
 	ResetFailedAttempts(ctx context.Context, email string) error
 	SaveMessage(ctx context.Context, arg SaveMessageParams) error
 	SearchMessages(ctx context.Context, arg SearchMessagesParams) ([]Message, error)
+	SetUserAvatar(ctx context.Context, arg SetUserAvatarParams) error
 	SoftDelete(ctx context.Context, id string) error
 	UpdatePasswordHash(ctx context.Context, arg UpdatePasswordHashParams) error
 	UpdateProfile(ctx context.Context, arg UpdateProfileParams) error

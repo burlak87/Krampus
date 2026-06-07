@@ -34,6 +34,7 @@ type Room interface {
 	UpdateRoom(ctx context.Context, room *domain.Room) error
 	DeleteRoom(ctx context.Context, id string) error
 	ListUserRooms(ctx context.Context, userID string) ([]*domain.Room, error)
+	ListRoomsByNamePrefix(ctx context.Context, prefix string) ([]*domain.Room, error)
 }
 
 type UserClient interface {
@@ -44,6 +45,7 @@ type UserClient interface {
 	GetUserStatus(userID string) userDomain.ChatUserStatus
 	SaveUser(ctx context.Context, user *userDomain.User) error
 	UpdateUser(ctx context.Context, user *userDomain.User) error
+	SetAvatar(ctx context.Context, userID string, avatar string) error
 }
 
 type Router struct {
@@ -120,10 +122,10 @@ func (r *Router) RegisterRoutes(rg *gin.RouterGroup) {
 	rg.POST("/moderation/ban", r.handleBanUser())
 	rg.POST("/moderation/mute", r.handleMuteUser())
 
-	if r.AvatarService != nil {
-		rg.POST("/profile/avatar", r.handleUploadAvatar())
-		rg.GET("/profile/:user_id", r.handleGetProfile())
-	}
+	rg.POST("/profile/avatar", r.handleUploadAvatar())
+	rg.GET("/profile/:user_id", r.handleGetProfile())
+
+	rg.POST("/rooms/:room_id/avatar", r.handleSetRoomAvatar())
 }
 
 func (r *Router) handleSendMessage() gin.HandlerFunc {
@@ -290,6 +292,25 @@ func (r *Router) handleJoinRoom() gin.HandlerFunc {
 			}
 		}
 
+		// Joining a group also grants membership to all of its channel rooms
+		// (named "<groupId>::<channel>") so the joiner sees and can use them.
+		channels, err := r.RoomService.ListRoomsByNamePrefix(c.Request.Context(), roomID+"::")
+		if err == nil {
+			for _, ch := range channels {
+				already := false
+				for _, m := range ch.Members {
+					if m == uid {
+						already = true
+						break
+					}
+				}
+				if !already {
+					ch.Members = append(ch.Members, uid)
+					_ = r.RoomService.UpdateRoom(c.Request.Context(), ch)
+				}
+			}
+		}
+
 		c.JSON(http.StatusOK, gin.H{"status": "joined", "room": room})
 	}
 }
@@ -450,33 +471,71 @@ func (r *Router) handleUploadAvatar() gin.HandlerFunc {
 			return
 		}
 
+		// Avatar is stored as a base64 data URL on the user record.
 		var body struct {
-			MediaID   string `json:"media_id" binding:"required"`
-			MediaType string `json:"media_type"`
+			Avatar string `json:"avatar" binding:"required"`
 		}
 		if err := c.ShouldBindJSON(&body); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
 
-		media := avatar.MediaFileInput{ID: body.MediaID, MediaType: body.MediaType}
-		if err := r.AvatarService.UploadAvatar(c.Request.Context(), userID.(string), media); err != nil {
+		if err := r.UserClientService.SetAvatar(c.Request.Context(), userID.(string), body.Avatar); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "avatar upload failed"})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+		c.JSON(http.StatusOK, gin.H{"user_id": userID, "avatar": body.Avatar})
 	}
 }
 
 func (r *Router) handleGetProfile() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID := c.Param("user_id")
-		profile, err := r.AvatarService.GetProfile(c.Request.Context(), userID)
+		user, err := r.UserClientService.GetUser(c.Request.Context(), userID)
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "profile not found"})
 			return
 		}
-		c.JSON(http.StatusOK, profile)
+		c.JSON(http.StatusOK, gin.H{"user_id": userID, "avatar": user.Avatar})
+	}
+}
+
+func (r *Router) handleSetRoomAvatar() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		userID, exists := c.Get("user_id")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+			return
+		}
+		roomID := c.Param("room_id")
+
+		var body struct {
+			Avatar string `json:"avatar" binding:"required"`
+		}
+		if err := c.ShouldBindJSON(&body); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		room, err := r.RoomService.GetRoom(c.Request.Context(), roomID)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "room not found"})
+			return
+		}
+
+		// only members may change the room avatar
+		isMember, _ := r.RoomService.IsRoomMember(c.Request.Context(), types.RoomID(roomID), types.UserID(userID.(string)))
+		if !isMember {
+			c.JSON(http.StatusForbidden, gin.H{"error": "not a member"})
+			return
+		}
+
+		room.Avatar = body.Avatar
+		if err := r.RoomService.UpdateRoom(c.Request.Context(), room); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to set avatar"})
+			return
+		}
+		c.JSON(http.StatusOK, room)
 	}
 }
 

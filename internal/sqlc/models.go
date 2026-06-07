@@ -443,14 +443,15 @@ type RolePermission struct {
 }
 
 type Room struct {
-	ID        string `json:"id"`
-	Type      string `json:"type"`
-	OwnerID   string `json:"owner_id"`
-	Name      string `json:"name"`
-	Members   []byte `json:"members"`
-	Settings  []byte `json:"settings"`
-	CreatedAt int64  `json:"created_at"`
-	UpdatedAt int64  `json:"updated_at"`
+	ID        string      `json:"id"`
+	Type      string      `json:"type"`
+	OwnerID   string      `json:"owner_id"`
+	Name      string      `json:"name"`
+	Members   []byte      `json:"members"`
+	Settings  []byte      `json:"settings"`
+	CreatedAt int64       `json:"created_at"`
+	UpdatedAt int64       `json:"updated_at"`
+	Avatar    pgtype.Text `json:"avatar"`
 }
 
 type SavedFolder struct {
@@ -583,6 +584,7 @@ type User struct {
 	BlockedUntil      pgtype.Timestamptz `json:"blocked_until"`
 	FailedAttempts    pgtype.Int4        `json:"failed_attempts"`
 	LastFailedAttempt pgtype.Timestamptz `json:"last_failed_attempt"`
+	Avatar            pgtype.Text        `json:"avatar"`
 }
 
 type UserProfile struct {

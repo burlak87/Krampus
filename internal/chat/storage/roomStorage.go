@@ -8,6 +8,8 @@ import (
 
 	"krampus/internal/chat/domain"
 	database "krampus/internal/sqlc"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type RoomPGStorage struct {
@@ -43,6 +45,7 @@ func (s *RoomPGStorage) GetRoom(ctx context.Context, id string) (*domain.Room, e
 		Settings:  settings,
 		CreatedAt: row.CreatedAt,
 		UpdatedAt: row.UpdatedAt,
+		Avatar:    row.Avatar.String,
 	}, nil
 }
 
@@ -65,6 +68,7 @@ func (s *RoomPGStorage) SaveRoom(ctx context.Context, room *domain.Room) error {
 		Settings:  settingsJSON,
 		CreatedAt: room.CreatedAt,
 		UpdatedAt: room.UpdatedAt,
+		Avatar:    pgtype.Text{String: room.Avatar, Valid: room.Avatar != ""},
 	})
 }
 
@@ -84,11 +88,42 @@ func (s *RoomPGStorage) UpdateRoom(ctx context.Context, room *domain.Room) error
 		Members:   membersJSON,
 		Settings:  settingsJSON,
 		UpdatedAt: time.Now().UnixNano(),
+		Avatar:    pgtype.Text{String: room.Avatar, Valid: room.Avatar != ""},
 	})
 }
 
 func (s *RoomPGStorage) DeleteRoom(ctx context.Context, id string) error {
 	return s.queries.DeleteRoom(ctx, id)
+}
+
+// ListRoomsByNamePrefix returns every room whose name starts with the given
+// prefix. Used to find a group's channel rooms (named "<groupId>::<channel>").
+func (s *RoomPGStorage) ListRoomsByNamePrefix(ctx context.Context, prefix string) ([]*domain.Room, error) {
+	rows, err := s.queries.ListRoomsByNamePrefix(ctx, prefix+"%")
+	if err != nil {
+		return nil, err
+	}
+
+	var rooms []*domain.Room
+	for _, row := range rows {
+		var members []string
+		_ = json.Unmarshal(row.Members, &members)
+		var settings domain.RoomSettings
+		_ = json.Unmarshal(row.Settings, &settings)
+
+		rooms = append(rooms, &domain.Room{
+			ID:        row.ID,
+			Type:      domain.RoomType(row.Type),
+			OwnerID:   row.OwnerID,
+			Name:      row.Name,
+			Members:   members,
+			Settings:  settings,
+			CreatedAt: row.CreatedAt,
+			UpdatedAt: row.UpdatedAt,
+			Avatar:    row.Avatar.String,
+		})
+	}
+	return rooms, nil
 }
 
 func (s *RoomPGStorage) ListUserRooms(ctx context.Context, userID string) ([]*domain.Room, error) {
@@ -114,6 +149,7 @@ func (s *RoomPGStorage) ListUserRooms(ctx context.Context, userID string) ([]*do
 			Settings:  settings,
 			CreatedAt: row.CreatedAt,
 			UpdatedAt: row.UpdatedAt,
+			Avatar:    row.Avatar.String,
 		})
 	}
 	return rooms, nil

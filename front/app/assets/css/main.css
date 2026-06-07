@@ -1,0 +1,32 @@
+@import "tailwindcss";
+@import "tailwind-scrollbar-hide/v4";
+
+@theme {
+    --color-body-500: #27282B;
+    --color-body-900: #1C1C1F;
+    --color-body-100: #313338;
+
+    --animate-group: groupOpen 2s ease-in-out 1;
+
+    @keyframes groupOpen {
+
+        0% {
+       
+            transform: translateY(1000px);
+            opacity: 0;
+        }
+        100% {
+            opacity: 1;
+        }
+
+
+    }
+}
+
+
+body {
+    background-color: --color-body-900;
+    height: 100vh;
+    box-sizing: border-box;
+    overflow-y: hidden;
+}

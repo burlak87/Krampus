@@ -1,22 +1,4 @@
-# ─────────────────────────────────────────────────────────────────────────────
-# Krampus — local development stack
-#
-# Services:
-#   Infrastructure : postgres, redis, zookeeper, kafka, minio
-#   Application    : backend (Go app)
-#   Observability  : loki, promtail, tempo, mimir, grafana
-#
-# Usage:
-#   docker-compose up -d            # start everything
-#   docker-compose up -d postgres redis kafka minio   # infra only
-#   docker-compose logs -f backend  # follow app logs
-# ─────────────────────────────────────────────────────────────────────────────
-
 services:
-
-  # ───────────────────────────────────────────
-  # PostgreSQL — primary database
-  # ───────────────────────────────────────────
   postgres:
     image: postgres:17-alpine
     container_name: krampus_postgres
@@ -39,9 +21,6 @@ services:
     networks:
       - krampus-net
 
-  # ───────────────────────────────────────────
-  # Redis — sessions, room cache, user-client cache
-  # ───────────────────────────────────────────
   redis:
     image: redis:7-alpine
     container_name: krampus_redis
@@ -60,9 +39,6 @@ services:
     networks:
       - krampus-net
 
-  # ───────────────────────────────────────────
-  # Zookeeper — required by Kafka
-  # ───────────────────────────────────────────
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.0
     container_name: krampus_zookeeper
@@ -73,7 +49,6 @@ services:
       - zookeeper_data:/var/lib/zookeeper/data
       - zookeeper_log:/var/lib/zookeeper/log
     healthcheck:
-      # Use "srvr" (enabled by default); "ruok" is not in this image's whitelist.
       test: ["CMD-SHELL", "echo srvr | nc localhost 2181 | grep -q Mode"]
       interval: 10s
       timeout: 5s
@@ -82,9 +57,6 @@ services:
     networks:
       - krampus-net
 
-  # ───────────────────────────────────────────
-  # Kafka — message transport (incoming topic fan-out)
-  # ───────────────────────────────────────────
   kafka:
     image: confluentinc/cp-kafka:7.5.0
     container_name: krampus_kafka
@@ -92,12 +64,10 @@ services:
       zookeeper:
         condition: service_healthy
     ports:
-      - "9092:9092"   # host access (app on host machine uses this)
+      - "9092:9092"
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      # PLAINTEXT_HOST  — reachable from the host machine (localhost:9092)
-      # PLAINTEXT       — reachable from other containers (kafka:29092)
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
@@ -115,18 +85,13 @@ services:
     networks:
       - krampus-net
 
-  # ───────────────────────────────────────────
-  # MinIO — local S3-compatible object storage
-  # Media files and upload chunks
-  # Console UI: http://localhost:9001  (minioadmin / minioadmin)
-  # ───────────────────────────────────────────
   minio:
     image: minio/minio:latest
     container_name: krampus_minio
     command: server /data --console-address ":9001"
     ports:
-      - "9000:9000"   # S3 API
-      - "9001:9001"   # Web console
+      - "9000:9000"
+      - "9001:9001"
     environment:
       MINIO_ROOT_USER:     ${AWS_ACCESS_KEY_ID:-minioadmin}
       MINIO_ROOT_PASSWORD: ${AWS_SECRET_ACCESS_KEY:-minioadmin}
@@ -142,10 +107,6 @@ services:
     networks:
       - krampus-net
 
-  # ───────────────────────────────────────────
-  # Backend — Go application
-  # Waits for all infrastructure to be healthy before starting.
-  # ───────────────────────────────────────────
   backend:
     build:
       context: .
@@ -163,11 +124,9 @@ services:
       minio:
         condition: service_healthy
     environment:
-      # Application
       ENV:     ${ENV:-development}
       NODE_ID: ${NODE_ID:-node-1}
 
-      # PostgreSQL — inside Docker, host = service name "postgres"
       POSTGRES_DSN: postgres://${POSTGRES_USER:-krampus}:${POSTGRES_PASSWORD:-krampus_pass}@postgres:5432/${POSTGRES_DB:-krampus}?sslmode=disable
 
       # Redis
@@ -175,30 +134,25 @@ services:
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       REDIS_DB:       ${REDIS_DB:-0}
 
-      # Kafka — internal listener address
       KAFKA_BROKERS:            kafka:29092
       KAFKA_TOPICS_INCOMING:    ${KAFKA_TOPICS_INCOMING:-incoming}
       KAFKA_TOPICS_VALIDATED:   ${KAFKA_TOPICS_VALIDATED:-validated}
       KAFKA_TOPICS_SAVED:       ${KAFKA_TOPICS_SAVED:-saved}
       KAFKA_TOPICS_BROADCAST:   ${KAFKA_TOPICS_BROADCAST:-broadcast}
 
-      # JWT
       JWT_SECRET: ${JWT_SECRET:-change-me-to-a-long-random-secret-in-production}
 
-      # Local file segment store
       FILE_BASE_PATH:    /app/storage
       FILE_SEGMENT_SIZE: ${FILE_SEGMENT_SIZE:-1h}
       FILE_BUFFER_SIZE:  ${FILE_BUFFER_SIZE:-64MB}
       FILE_FLUSH_TIMEOUT: ${FILE_FLUSH_TIMEOUT:-100ms}
 
-      # S3 — points to MinIO inside Docker
       AWS_REGION:            ${AWS_REGION:-us-east-1}
       AWS_BUCKET:            ${AWS_BUCKET:-krampus-media}
       AWS_ACCESS_KEY_ID:     ${AWS_ACCESS_KEY_ID:-minioadmin}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-minioadmin}
       AWS_ENDPOINT:          http://minio:9000
 
-      # Call / WebRTC signaling
       CALL_PRESENCE_TTL: ${CALL_PRESENCE_TTL:-30s}
       CALL_MAX_PEERS:    ${CALL_MAX_PEERS:-8}
       STUN_SERVERS:      ${STUN_SERVERS:-stun:stun.l.google.com:19302}
@@ -211,9 +165,6 @@ services:
     networks:
       - krampus-net
 
-  # ───────────────────────────────────────────
-  # Loki — log aggregation
-  # ───────────────────────────────────────────
   loki:
     image: grafana/loki:latest
     container_name: krampus_loki
@@ -233,9 +184,6 @@ services:
     networks:
       - krampus-net
 
-  # ───────────────────────────────────────────
-  # Promtail — ships container logs to Loki
-  # ───────────────────────────────────────────
   promtail:
     image: grafana/promtail:latest
     container_name: krampus_promtail
@@ -249,17 +197,14 @@ services:
     networks:
       - krampus-net
 
-  # ───────────────────────────────────────────
-  # Tempo — distributed tracing
-  # ───────────────────────────────────────────
   tempo:
     image: grafana/tempo:latest
     container_name: krampus_tempo
     command: ["-config.file=/etc/tempo.yaml"]
     ports:
-      - "3200:3200"   # Tempo HTTP API
-      - "4317:4317"   # OTLP gRPC
-      - "4318:4318"   # OTLP HTTP
+      - "3200:3200"
+      - "4317:4317"
+      - "4318:4318"
     volumes:
       - ./tempo.yaml:/etc/tempo.yaml:ro
       - tempo_data:/tmp/tempo
@@ -267,15 +212,12 @@ services:
     networks:
       - krampus-net
 
-  # ───────────────────────────────────────────
-  # Mimir — long-term metrics (Prometheus-compatible)
-  # ───────────────────────────────────────────
   mimir:
     image: grafana/mimir:latest
     container_name: krampus_mimir
     command: ["-config.file=/etc/mimir.yaml"]
     ports:
-      - "9009:9009"   # Mimir HTTP API / management
+      - "9009:9009"
     volumes:
       - ./mimir.yaml:/etc/mimir.yaml:ro
       - mimir_data:/data
@@ -283,10 +225,6 @@ services:
     networks:
       - krampus-net
 
-  # ───────────────────────────────────────────
-  # Grafana — dashboards
-  # UI: http://localhost:3001  (admin / see GRAFANA_PASSWORD)
-  # ───────────────────────────────────────────
   grafana:
     image: grafana/grafana-enterprise:latest
     container_name: krampus_grafana
@@ -308,7 +246,6 @@ services:
     networks:
       - krampus-net
 
-# ─────────────────────────────────────────────
 volumes:
   postgres_data:
   redis_data:

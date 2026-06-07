@@ -25,8 +25,6 @@ type User struct {
 	Status       ChatUserStatus         `json:"status"`
 	Permissions  []string               `json:"permissions"`
 	Metadata     map[string]interface{} `json:"metadata,omitempty"`
-	// BlockedUntil
-	// FailedLogins
 }
 
 type Code struct {

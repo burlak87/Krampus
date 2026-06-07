@@ -2,7 +2,6 @@ package service
 
 import "context"
 
-// GetChunksForIntegrityCheck returns up to limit chunks that need verification.
 func (r *Repository) GetChunksForIntegrityCheck(ctx context.Context, limit int) ([]Chunk, error) {
 	query := `
 		SELECT
@@ -32,7 +31,6 @@ func (r *Repository) GetChunksForIntegrityCheck(ctx context.Context, limit int) 
 	return chunks, rows.Err()
 }
 
-// GetBrokenChunks returns chunks whose sessions are completed but checksums are unverified.
 func (r *Repository) GetBrokenChunks(ctx context.Context) ([]Chunk, error) {
 	query := `
 		SELECT

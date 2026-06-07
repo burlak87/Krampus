@@ -24,7 +24,6 @@ func NewMessagePGStorage(pool *pgxpool.Pool, queries *database.Queries) *Message
 	}
 }
 
-// SaveMessage — сохранение одного сообщения через sqlc
 func (p *MessagePGStorage) SaveMessage(ctx context.Context, msg *domain.BaseMessage) error {
 	return p.queries.SaveMessage(ctx, database.SaveMessageParams{
 		ID:        msg.ID.String(),
@@ -37,16 +36,13 @@ func (p *MessagePGStorage) SaveMessage(ctx context.Context, msg *domain.BaseMess
 	})
 }
 
-// SaveMessageBatch — пакетное сохранение через транзакцию sqlc
 func (p *MessagePGStorage) SaveMessageBatch(ctx context.Context, msgs []*domain.BaseMessage) error {
-	// Создаем транзакцию, используя переданный пул
 	tx, err := p.pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to begin tx: %w", err)
 	}
 	defer tx.Rollback(ctx)
 
-	// "Привязываем" запросы к этой транзакции
 	qtx := p.queries.WithTx(tx)
 
 	for _, msg := range msgs {
@@ -67,7 +63,6 @@ func (p *MessagePGStorage) SaveMessageBatch(ctx context.Context, msgs []*domain.
 	return tx.Commit(ctx)
 }
 
-// GetRoomMessages — история чата через sqlc
 func (p *MessagePGStorage) GetRoomMessages(ctx context.Context, roomID string, limit int) ([]*domain.BaseMessage, error) {
 	rows, err := p.queries.GetRoomMessages(ctx, database.GetRoomMessagesParams{
 		RoomID: roomID,
@@ -95,7 +90,6 @@ func (p *MessagePGStorage) GetRoomMessages(ctx context.Context, roomID string, l
 		})
 	}
 
-	// Реверс для хронологического порядка
 	for i, j := 0, len(messages)-1; i < j; i, j = i+1, j-1 {
 		messages[i], messages[j] = messages[j], messages[i]
 	}
@@ -103,7 +97,6 @@ func (p *MessagePGStorage) GetRoomMessages(ctx context.Context, roomID string, l
 	return messages, nil
 }
 
-// GetMessage — получение одного сообщения по ID
 func (p *MessagePGStorage) GetMessage(ctx context.Context, id string) (*domain.BaseMessage, error) {
 	row, err := p.queries.GetMessage(ctx, id)
 	if err != nil {
@@ -131,7 +124,6 @@ func (p *MessagePGStorage) SoftDeleteMessage(ctx context.Context, id string) err
 	return err
 }
 
-// CleanupOldMessages — удаление старых сообщений каждые 24ч
 func (p *MessagePGStorage) CleanupOldMessages(ctx context.Context) error {
 	return p.queries.CleanupOldMessages(ctx)
 }

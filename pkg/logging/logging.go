@@ -48,7 +48,6 @@ func Init() {
 	l := logrus.New()
 	l.SetReportCaller(true)
 	
-	// Изменяем только формат для Docker
 	if os.Getenv("DOCKER_ENV") == "true" || os.Getenv("APP_ENV") == "prod" {
 		// JSON формат для Docker/production
 		l.Formatter = &logrus.JSONFormatter{
@@ -59,7 +58,6 @@ func Init() {
 			},
 		}
 	} else {
-		// Текстовый формат для локальной разработки
 		l.Formatter = &logrus.TextFormatter{
 			CallerPrettyfier: func(frame *runtime.Frame) (function string, file string) {
 				filename := path.Base(frame.File)
@@ -70,20 +68,15 @@ func Init() {
 		}
 	}
 	
-	// Пытаемся создать директорию logs, но не паникуем если не получается
 	if err := os.MkdirAll("logs", 0755); err != nil {
-		// Если не можем создать директорию, просто пишем в stdout
 		l.SetOutput(os.Stdout)
 		l.Warnf("Cannot create logs directory: %v. Logging to stdout only.", err)
 	} else {
-		// Открываем файл для логов
 		allFile, err := os.OpenFile("logs/all.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0640)
 		if err != nil {
-			// Если не можем открыть файл, пишем только в stdout
 			l.SetOutput(os.Stdout)
 			l.Warnf("Cannot open log file: %v. Logging to stdout only.", err)
 		} else {
-			// Устанавливаем хук для записи в файл и stdout
 			l.SetOutput(io.Discard)
 			l.AddHook(&writeHook{
 				Writer: []io.Writer{allFile, os.Stdout},
@@ -92,7 +85,6 @@ func Init() {
 		}
 	}
 	
-	// Устанавливаем уровень логирования из переменной окружения
 	logLevel := os.Getenv("LOG_LEVEL")
 	if logLevel == "" {
 		logLevel = "info"

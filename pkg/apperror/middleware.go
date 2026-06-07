@@ -44,7 +44,6 @@ func ErrorMiddleware() gin.HandlerFunc {
 	}
 }
 
-// CORSMiddleware — разрешает кросс-доменные запросы
 func CORSMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Header("Access-Control-Allow-Origin", "*")
@@ -59,13 +58,11 @@ func CORSMiddleware() gin.HandlerFunc {
 	}
 }
 
-// AuthMiddleware — умная авторизация (Redis + JWT)
 func AuthMiddleware(redisStorage storage.RedisSessionStorage, jwtSecret string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ctx := c.Request.Context()
 		authHeader := c.GetHeader("Authorization")
 
-		// Проверка формата Bearer
 		if !strings.HasPrefix(authHeader, "Bearer ") {
 			c.Error(New(ErrUnauthorized, "invalid auth format (bearer required)"))
 			c.Abort()
@@ -74,7 +71,6 @@ func AuthMiddleware(redisStorage storage.RedisSessionStorage, jwtSecret string) 
 
 		tokenString := authHeader[7:]
 
-		// 1. Пытаемся взять из кэша Redis
 		if any(redisStorage) != nil {
 			if session, err := redisStorage.GetAccessToken(ctx, types.SessionIDFromString(tokenString)); err == nil {
 				c.Set("user_id", fmt.Sprintf("%d", session.UserID))
@@ -83,7 +79,6 @@ func AuthMiddleware(redisStorage storage.RedisSessionStorage, jwtSecret string) 
 			}
 		}
 
-		// 2. Если в кэше нет — парсим JWT
 		token, err := jwt.Parse(tokenString, func(t *jwt.Token) (interface{}, error) {
 			return []byte(jwtSecret), nil
 		})
@@ -101,7 +96,6 @@ func AuthMiddleware(redisStorage storage.RedisSessionStorage, jwtSecret string) 
 			return
 		}
 
-		// Извлекаем userID (обычно float64 в JWT)
 		userIDRaw, ok := claims["user_id"]
 		if !ok {
 			c.Error(New(ErrUnauthorized, "user_id not found in token"))
@@ -112,7 +106,6 @@ func AuthMiddleware(redisStorage storage.RedisSessionStorage, jwtSecret string) 
 		userID := int64(userIDRaw.(float64))
 		userIDStr := fmt.Sprintf("%d", userID)
 
-		// 3. Кэшируем результат для следующих запросов
 		if any(redisStorage) != nil {
 			_ = redisStorage.SetAccessToken(ctx, tokenString, domain.CachedSession{
 				UserID:    userID,

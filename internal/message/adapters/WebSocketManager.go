@@ -129,8 +129,6 @@ func NewConnectionManager(
 	return m
 }
 
-// SetSuppressor installs a shadow-ban check; when fn returns false the
-// message is silently dropped for that sender.
 func (m *ConnectionManager) SetSuppressor(fn func(ctx context.Context, userID string) bool) {
 	m.suppressorFn = fn
 }

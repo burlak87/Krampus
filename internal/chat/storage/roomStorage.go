@@ -96,8 +96,6 @@ func (s *RoomPGStorage) DeleteRoom(ctx context.Context, id string) error {
 	return s.queries.DeleteRoom(ctx, id)
 }
 
-// ListRoomsByNamePrefix returns every room whose name starts with the given
-// prefix. Used to find a group's channel rooms (named "<groupId>::<channel>").
 func (s *RoomPGStorage) ListRoomsByNamePrefix(ctx context.Context, prefix string) ([]*domain.Room, error) {
 	rows, err := s.queries.ListRoomsByNamePrefix(ctx, prefix+"%")
 	if err != nil {

@@ -248,9 +248,6 @@ func (s *User) IsUserBlocked(ctx context.Context, email string) (bool, int64, er
 	}
 
 	if len(result) > 0 {
-		// UserBlocked always returns one row; the is_blocked flag tells us
-		// whether the account is actually blocked. blocked_until is a time.Time
-		// (zero value when never blocked).
 		if blocked, _ := result[0]["is_blocked"].(bool); !blocked {
 			return false, 0, nil
 		}

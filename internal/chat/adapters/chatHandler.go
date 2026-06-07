@@ -165,7 +165,6 @@ func (r *Router) handleGetMessages() gin.HandlerFunc {
 			c.Error(err.(*apperror.AppError))
 			return
 		}
-		// Return a bare array, matching docs/API.md and the frontend client.
 		if msgs == nil {
 			msgs = []*messageDomain.BaseMessage{}
 		}
@@ -268,7 +267,6 @@ func (r *Router) handleJoinRoom() gin.HandlerFunc {
 			return
 		}
 
-		// Accept either a krampus://join/<id> deep link or a bare room id.
 		roomID := body.Token
 		if extracted, err := invites.ExtractJoinToken(body.Token); err == nil {
 			roomID = extracted
@@ -280,8 +278,6 @@ func (r *Router) handleJoinRoom() gin.HandlerFunc {
 			return
 		}
 
-		// Grant membership so the joiner can connect to /ws and /call/ws
-		// (WSAuthService enforces room membership).
 		uid := userID.(string)
 		isMember, _ := r.RoomService.IsRoomMember(c.Request.Context(), types.RoomID(roomID), types.UserID(uid))
 		if !isMember {
@@ -292,8 +288,6 @@ func (r *Router) handleJoinRoom() gin.HandlerFunc {
 			}
 		}
 
-		// Joining a group also grants membership to all of its channel rooms
-		// (named "<groupId>::<channel>") so the joiner sees and can use them.
 		channels, err := r.RoomService.ListRoomsByNamePrefix(c.Request.Context(), roomID+"::")
 		if err == nil {
 			for _, ch := range channels {
@@ -471,7 +465,6 @@ func (r *Router) handleUploadAvatar() gin.HandlerFunc {
 			return
 		}
 
-		// Avatar is stored as a base64 data URL on the user record.
 		var body struct {
 			Avatar string `json:"avatar" binding:"required"`
 		}
@@ -523,7 +516,6 @@ func (r *Router) handleSetRoomAvatar() gin.HandlerFunc {
 			return
 		}
 
-		// only members may change the room avatar
 		isMember, _ := r.RoomService.IsRoomMember(c.Request.Context(), types.RoomID(roomID), types.UserID(userID.(string)))
 		if !isMember {
 			c.JSON(http.StatusForbidden, gin.H{"error": "not a member"})

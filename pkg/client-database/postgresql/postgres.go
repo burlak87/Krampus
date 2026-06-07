@@ -1,4 +1,3 @@
-// pkg/client-database/postgresql/client.go
 package postgresql
 
 import (

@@ -45,7 +45,6 @@ func (ucs *UserClientService) SetAvatar(ctx context.Context, userID string, avat
 	if err := ucs.storage.SetAvatar(ctx, userID, avatar); err != nil {
 		return err
 	}
-	// drop stale cache so the new avatar is served
 	ucs.cache.DeleteUserClient(ctx, userID)
 	return nil
 }

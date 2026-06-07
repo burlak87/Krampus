@@ -22,7 +22,6 @@ type Config struct {
 	Call        CallConfig
 }
 
-// CallConfig holds WebRTC signaling / presence settings.
 type CallConfig struct {
 	PresenceTTL time.Duration
 	MaxPeers    int

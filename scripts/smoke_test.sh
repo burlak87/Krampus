@@ -1,15 +1,5 @@
 #!/usr/bin/env bash
-#
-# smoke_test.sh — exercises the documented Krampus REST contracts end-to-end
-# against a running backend (see docs/API.md). It registers two users, creates a
-# shared room, validates membership, and hits the call/chat endpoints the
-# frontend depends on. Use it to confirm the backend is healthy before manual
-# browser testing.
-#
-# Prereqs: backend running on $BASE, plus `curl` and `jq`.
-# Usage:   ./scripts/smoke_test.sh            (defaults to localhost:8080)
-#          BASE=http://host:8080 ./scripts/smoke_test.sh
-#
+
 set -euo pipefail
 
 BASE="${BASE:-http://localhost:8080}"
@@ -45,8 +35,6 @@ B_TOK="$(curl -sf -X POST "$API/auth/signin" -H 'Content-Type: application/json'
 [ -n "$B_TOK" ] || fail "bob signin" "no access_token"
 pass "bob signin → access_token"
 
-# user_id is the JWT 'user_id' claim (base64url payload, middle segment).
-# base64url → base64, then re-pad to a multiple of 4 before decoding.
 jwt_uid() {
   local p; p="$(echo "$1" | cut -d. -f2 | tr '_-' '/+')"
   while [ $(( ${#p} % 4 )) -ne 0 ]; do p="${p}="; done

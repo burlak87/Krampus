@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	_ "github.com/jackc/pgx/v5/stdlib" // database/sql driver "pgx"
+	_ "github.com/jackc/pgx/v5/stdlib"
 
 	authRest "krampus/internal/auth/adapters"
 	authService "krampus/internal/auth/service"
@@ -86,10 +86,6 @@ func main() {
 
 	gin.SetMode(ginModeFor(cfg.Env))
 
-	// -------------------------------------------------------------------------
-	// DATABASES
-	// -------------------------------------------------------------------------
-
 	pool, err := postgresql.NewClient(ctx, 15, *cfg)
 	if err != nil {
 		logger.Fatalf("postgres init failed: %v", err)
@@ -113,10 +109,6 @@ func main() {
 		logger.Fatalf("sql.DB open failed: %v", err)
 	}
 
-	// -------------------------------------------------------------------------
-	// KAFKA
-	// -------------------------------------------------------------------------
-
 	kafkaCfg := config.KafkaConfig{
 		Brokers: cfg.Kafka.Brokers,
 		Topics:  cfg.Kafka.Topics,
@@ -129,15 +121,7 @@ func main() {
 		logger.Fatalf("kafka consumer init failed: %v", err)
 	}
 
-	// -------------------------------------------------------------------------
-	// SECURITY
-	// -------------------------------------------------------------------------
-
 	jwtSecret := getJWTSecret()
-
-	// -------------------------------------------------------------------------
-	// USER MODULE
-	// -------------------------------------------------------------------------
 
 	loginAttemptStorage := userStorage.NewLoginAttemptStorage(queries)
 	userPG := userStorage.NewUserStorage(queries)
@@ -167,10 +151,6 @@ func main() {
 	refreshHandler := userRest.NewRefreshTokenHandler(refreshSvc, logger)
 	twoFAHandler := authRest.NewTwoFAHandler(twoFASvc, logger)
 
-	// -------------------------------------------------------------------------
-	// CHAT MODULE
-	// -------------------------------------------------------------------------
-
 	userClientRedis := chatStorage.NewUserClientCache(redisWrapper)
 	userClientStorage := chatStorage.NewUserClientPGStorage(queries)
 
@@ -187,10 +167,6 @@ func main() {
 		roomRedis,
 		userClientSvc,
 	)
-
-	// -------------------------------------------------------------------------
-	// MESSAGE MODULE
-	// -------------------------------------------------------------------------
 
 	fileStorage := messageStorage.NewFileStorage(
 		cfg.File.BasePath,
@@ -216,12 +192,7 @@ func main() {
 		idempotencyRepo,
 	)
 
-	// Wire file-backed secondary store (Phase 10)
 	messageSvc.SetFileStore(fileStorage)
-
-	// -------------------------------------------------------------------------
-	// IDENTITY + WS AUTH
-	// -------------------------------------------------------------------------
 
 	jwtSvc := identityService.NewJWTService(jwtSecret)
 
@@ -231,13 +202,6 @@ func main() {
 		roomSvc,
 	)
 
-	// -------------------------------------------------------------------------
-	// EVENT INFRASTRUCTURE
-	// -------------------------------------------------------------------------
-
-	// The event-sourcing subsystem (partition leases, audit/search consumers)
-	// needs extra tables (e.g. event_partition_leases) that are not part of the
-	// base schema, so it is opt-in via EVENTS_ENABLED to avoid log spam.
 	eventsEnabled := os.Getenv("EVENTS_ENABLED") == "true"
 
 	eventBus := eventsSvc.NewBus()
@@ -251,10 +215,6 @@ func main() {
 		logger.Infoln("event-coordinator disabled (set EVENTS_ENABLED=true to enable)")
 	}
 
-	// -------------------------------------------------------------------------
-	// AUDIT CONSUMER
-	// -------------------------------------------------------------------------
-
 	auditConsumer := auditSvc.NewConsumer(sqlDB)
 	eventBus.Subscribe("message_created", auditConsumer)
 	eventBus.Subscribe("moderation_action_created", auditConsumer)
@@ -267,10 +227,6 @@ func main() {
 		go supervisor.RunWorker(ctx, "audit-consumer", auditEventConsumer.Start)
 	}
 
-	// -------------------------------------------------------------------------
-	// SEARCH CONSUMER
-	// -------------------------------------------------------------------------
-
 	searchIndexer := searchSvc.NewIndexer(sqlDB)
 	searchConsumer := searchSvc.NewConsumer(searchIndexer)
 
@@ -282,10 +238,6 @@ func main() {
 		go supervisor.RunWorker(ctx, "search-consumer", searchEventConsumer.Start)
 	}
 
-	// -------------------------------------------------------------------------
-	// MODERATION
-	// -------------------------------------------------------------------------
-
 	moderationRepo := moderationStorage.NewRepository(sqlDB)
 	_ = moderationRepo
 	moderationTools := moderationService.NewTools(sqlDB)
@@ -295,16 +247,8 @@ func main() {
 
 	eventBus.Subscribe("moderation_action_created", moderationProjection)
 
-	// -------------------------------------------------------------------------
-	// PERMISSIONS
-	// -------------------------------------------------------------------------
-
 	permissionsRepo := permissions.NewPostgresRepository(sqlDB)
 	permissionsSvc := permissions.NewService(permissionsRepo)
-
-	// -------------------------------------------------------------------------
-	// POLLS
-	// -------------------------------------------------------------------------
 
 	pollsSvc := pollsService.NewService(sqlDB)
 	pollProjection := pollsService.NewProjection(sqlDB)
@@ -312,16 +256,8 @@ func main() {
 
 	go supervisor.RunWorker(ctx, "poll-closing-worker", pollClosingWorker.Start)
 
-	// -------------------------------------------------------------------------
-	// REACTIONS / STICKERS
-	// -------------------------------------------------------------------------
-
 	reactionService := reactionsService.NewService(sqlDB)
 	stickerService := stickersService.NewService(sqlDB)
-
-	// -------------------------------------------------------------------------
-	// RETENTION
-	// -------------------------------------------------------------------------
 
 	retentionRepo := retentionStorage.NewRepository(sqlDB)
 	retentionExecutor := retentionSvc.NewExecutor(sqlDB)
@@ -351,15 +287,7 @@ func main() {
 		}
 	})
 
-	// -------------------------------------------------------------------------
-	// SYNC SERVICE
-	// -------------------------------------------------------------------------
-
 	syncService := syncSvc.NewService(sqlDB)
-
-	// -------------------------------------------------------------------------
-	// MEDIA / AVATAR
-	// -------------------------------------------------------------------------
 
 	s3Client, err := filesStorage.NewS3Client(ctx, cfg)
 	if err != nil {
@@ -373,17 +301,9 @@ func main() {
 	avatarRepo := avatar.NewRepository(sqlDB)
 	avatarSvc := avatar.New(mediaService, avatarRepo)
 
-	// -------------------------------------------------------------------------
-	// PUSH NOTIFICATIONS
-	// -------------------------------------------------------------------------
-
 	fcmProvider := notifProviders.NewFCMProvider()
 	notificationSvc := notifService.New(fcmProvider)
 	_ = notificationSvc
-
-	// -------------------------------------------------------------------------
-	// UPLOAD BACKGROUND WORKERS
-	// -------------------------------------------------------------------------
 
 	uploadRepo := filesService.NewRepository(sqlDB)
 	objectStore := filesStorage.NewS3Storage(s3Client, cfg.S3.Bucket)
@@ -393,10 +313,6 @@ func main() {
 	go supervisor.RunWorker(ctx, "upload-cleanup", filesWorkers.NewCleanupWorker(sqlDB).Start)
 	go supervisor.RunWorker(ctx, "upload-integrity", filesWorkers.NewIntegrityWorker(uploadRepo, integrityVerifier).Start)
 	go supervisor.RunWorker(ctx, "upload-repair", filesWorkers.NewRepairWorker(uploadRepo, resumeVerifier).Start)
-
-	// -------------------------------------------------------------------------
-	// ROUTERS + WEBSOCKET
-	// -------------------------------------------------------------------------
 
 	chatRouter := chatAdapters.NewRouter(
 		sessionRedis,
@@ -426,19 +342,13 @@ func main() {
 		replayRepo,
 	)
 
-	// Install shadow-ban suppressor on the shared connection manager.
 	wsServer.Manager().SetSuppressor(deliverySuppressor.AllowBroadcast)
 
-	// SSE server shares the same ConnectionManager.
 	sseServer := messageAdapters.NewSSEServer(
 		wsAuthSvc,
 		wsServer.Manager(),
 		replayRepo,
 	)
-
-	// -------------------------------------------------------------------------
-	// HTTP SERVER
-	// -------------------------------------------------------------------------
 
 	engine := gin.New()
 
@@ -476,7 +386,6 @@ func main() {
 		sseServer.HandleSSE(c.Writer, c.Request)
 	})
 
-	// HTTP_PORT may or may not include a leading colon (e.g. ":8080" or "8080").
 	addr := ":" + strings.TrimPrefix(cfg.HTTPPort, ":")
 
 	srv := &http.Server{
@@ -494,10 +403,6 @@ func main() {
 			logger.Fatalf("server failed: %v", err)
 		}
 	}()
-
-	// -------------------------------------------------------------------------
-	// GRACEFUL SHUTDOWN
-	// -------------------------------------------------------------------------
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
@@ -532,8 +437,6 @@ func overrideConfigFromEnv(cfg *config.Config) {
 	}
 }
 
-// ginModeFor maps the application environment (e.g. "development", "production")
-// to a valid Gin mode. Gin only accepts debug/release/test.
 func ginModeFor(env string) string {
 	switch env {
 	case "production", "prod", "release":

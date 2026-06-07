@@ -241,9 +241,7 @@ cp .env.example .env
 #    JWT_SECRET=<любая случайная строка 32+ символов>
 
 # 3. Собрать и запустить весь стек
-docker compose up -d --build
-# либо короткая форма:
-make up
+docker compose up -d
 ```
 
 Дождитесь, пока контейнеры станут healthy (бэкенд ждёт postgres/redis/kafka/minio):

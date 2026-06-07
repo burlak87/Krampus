@@ -63,10 +63,6 @@ export class WebRTC extends Signaling {
                         this.#reactionAnswerClose(data)
                     }
                 }
-            } else if (data.type == "checkCountUserCall") {
-                // Reply to the call-server handshake: number of peers already in
-                // the call before we registered.
-                console.log("Уже в звонке:", data.count)
             } else if (data.type == "iceCandidate") {
                 (data as iceCandidate)
                 this.#reactiionICECandidate(data)
@@ -231,32 +227,17 @@ export class WebRTC extends Signaling {
 
     async startCall() {
         this.#initializationWS()
-        // First frame the call server expects on a "call" connection.
-        this.sendSignalCheckCountUserCall()
         console.log("start")
-        try {
-            this.#stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-            this.#callStore.statusUser.audio = true
-            this.sendSignalStartStream()
-        } catch (e) {
-            // Mic/camera blocked or unavailable: join the call without local media.
-            console.warn("[call] local media unavailable, joining muted", e)
-            this.#callStore.statusUser.audio = false
-        }
+        this.#stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+        this.#callStore.statusUser.audio = true
+        this.sendSignalStartStream()
         this.sendSignalStatusUser("Active")
     }
 
     async connectionCall() {
         this.#initializationWS()
-        // First frame the call server expects on a "call" connection.
-        this.sendSignalCheckCountUserCall()
-        try {
-            this.#stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-            this.#callStore.statusUser.audio = true
-        } catch (e) {
-            console.warn("[call] local media unavailable, joining muted", e)
-            this.#callStore.statusUser.audio = false
-        }
+        this.#stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+        this.#callStore.statusUser.audio = true
         console.log("connect")
         this.sendSignalCheckUser(false)
 
@@ -282,11 +263,9 @@ export class WebRTC extends Signaling {
     stopTrack() {
         this.#callStore.peerConnectionUsers.clear()
 
-        if (this.#stream) {
-            this.#stream.getTracks().forEach((el) => {
-                el.stop()
-            })
-        }
+        this.#stream.getTracks().forEach((el) => {
+            el.stop()
+        })
 
         this.#stream = null
     }
@@ -477,7 +456,6 @@ export class WebRTC extends Signaling {
         this.sendSignalStatusUser("Close")
 
         this.stopTrack()
-        this.#stream.getTracks().forEach(track => track.stop());
         this.#callStore.peerConnectionUsers.clear()
         this.#callStore.statusUser.viewingStream.status = false
         this.#callStore.statusUser.audio = false

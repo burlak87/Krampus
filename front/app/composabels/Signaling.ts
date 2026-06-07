@@ -158,20 +158,6 @@ export class Signaling {
         }
     }
 
-    // Handshake required by the call server (frontend/server/api): a "call"
-    // connection MUST send this as its first frame; the server replies with the
-    // current call-peer count before registering the peer.
-    sendSignalCheckCountUserCall() {
-        const msg = JSON.stringify({ type: "checkCountUserCall" })
-        if (this.#webSoket && this.#webSoket.readyState === WebSocket.OPEN) {
-            this.#webSoket.send(msg)
-        } else if (this.#webSoket?.readyState === WebSocket.CONNECTING) {
-            this.#pendingMessages.push(msg)
-        } else {
-            console.warn('Невозможно отправить, сокет не открыт')
-        }
-    }
-
     sendSignalCheckUser(preliminary: boolean) {
         if (this.#webSoket && this.#webSoket.readyState === WebSocket.OPEN) {
             this.#webSoket.send(this.#reStructurCheckUser(preliminary))

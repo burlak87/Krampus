@@ -58,7 +58,10 @@ async function loadMessages() {
 }
 
 onMounted(loadMessages)
-watch(roomId, loadMessages)
+watch(roomId, () => {
+    messageUser.value = []
+    loadMessages()
+})
 
 // Light polling so the receiver sees incoming messages without a reload.
 let pollTimer: ReturnType<typeof setInterval> | undefined

@@ -8,6 +8,4 @@
 *.dylib
 /krampus
 /app
-# Runtime file-storage dir (FILE_BASE_PATH=./storage), anchored to repo root
-# so it does NOT match Go source packages like internal/*/storage/.
-/storage/
+storage/

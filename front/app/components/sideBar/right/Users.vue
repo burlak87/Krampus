@@ -34,8 +34,6 @@ async function onRoomAvatarPick(e: Event) {
     }
 }
 
-// Resolve member id-list to user objects. The passed RoomData may be a light
-// channel object without members, so fetch the room by id when needed.
 async function loadMembers() {
     const room = props.RoomData
     if (!room?.id) {
@@ -55,7 +53,6 @@ async function loadMembers() {
     const byId: Record<string, any> = {}
     for (const u of all) byId[String(u.id)] = u
     members.value = ids.map((id: string) => byId[String(id)] ?? { id, username: String(id) })
-    // resolve the room avatar (light channel objects may lack it)
     roomAvatar.value = room.avatar ?? ''
     if (!roomAvatar.value) {
         const full = await groupClass.openGroup(String(room.id))

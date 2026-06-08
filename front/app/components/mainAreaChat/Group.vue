@@ -5,7 +5,6 @@ import type { genericRef } from '~~/types/other'
 import type { BaseMessage } from '~~/types/api/respons'
 
 const props = defineProps(["Room"])
-// Room prop is the [type, roomObject] tuple emitted by the sidebar.
 const roomId = computed<string>(() => (props.Room?.[1]?.id ?? '') as string)
 
 const rightSideBarType = ref('')
@@ -80,7 +79,6 @@ const funcMessage = async () => {
 const activeSearch = ref(false)
 const searchData = ref("")
 
-// Client-side search over loaded messages (server indexer pipeline is off).
 const matchedIds = computed<Set<string>>(() => {
     const q = (searchData.value || '').trim().toLowerCase()
     if (!q) return new Set()

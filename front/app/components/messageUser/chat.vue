@@ -5,8 +5,6 @@ const isHover = ref(false)
 
 const userStore = useUserStore()
 
-// Own messages align right. Prefer a robust user_id comparison; fall back to
-// username when the message carries no id.
 const isActiveUser = computed(() => {
     const me = userStore.userData
     if (userMessage?.userId != null && me?.id != null) {

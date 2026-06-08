@@ -38,22 +38,18 @@ async function onGroupAvatarPick(e: Event) {
     }
 }
 
-// Channel rooms encode their parent group id in the name: "<groupId>::<channelName>".
 const CHANNEL_SEP = '::'
 const isChannelRoom = (r: any) => typeof r?.name === 'string' && r.name.includes(CHANNEL_SEP)
 
 async function loadAll() {
     allUser.value = await userClass.getAllUser()
     rooms.value = await groupClass.requestGroup()
-    // If a group panel is open, rebuild it so newly-synced channels show up.
     if (activeGroup.value) {
         const g = activeGroup.value
         activeGroup.value = buildChannels(String(g.id), g.username, g.members ?? [], g.avatar ?? '')
     }
 }
 
-// Constant polling, but group-scoped: it only refreshes the rooms list (groups
-// and their channels), never the user list or an open personal conversation.
 const POLL_MS = 5000
 let pollTimer: ReturnType<typeof setInterval> | undefined
 
@@ -74,7 +70,6 @@ onUnmounted(() => {
     if (pollTimer) clearInterval(pollTimer)
 })
 
-// Top-level entries: real groups/personals, excluding channel rooms.
 const displayRooms = computed(() => rooms.value.filter((r: any) => !isChannelRoom(r)))
 
 async function createGroup(name: string) {
@@ -84,7 +79,6 @@ async function createGroup(name: string) {
     await loadAll()
 }
 
-// Build the channel sidebar for a group, reading persisted channel rooms.
 function buildChannels(id: string, name: string, members: string[] = [], avatar = '') {
     const channels = rooms.value
         .filter((r: any) => isChannelRoom(r) && r.name.startsWith(id + CHANNEL_SEP))
@@ -97,12 +91,10 @@ function buildChannels(id: string, name: string, members: string[] = [], avatar 
     return { id, name, username: name, members, avatar, chat: { [name]: channels } }
 }
 
-// A "group" username has a trailing _<digits> suffix.
 function isGroup(el: any): boolean {
     return /_\d+$/.test(el?.username ?? '')
 }
 
-// Click on a user → OPEN the existing personal chat with them (no creation).
 async function handleClick(el: any) {
     if (isGroup(el)) {
         activeGroup.value = buildChannels(String(el.id), el.username)
@@ -118,7 +110,6 @@ async function handleClick(el: any) {
     }
 }
 
-// Created group rooms → open the channel sidebar.
 function openRoom(room: any) {
     if (room.type === 'personal') {
         emit('openChat', ['personal', room])
@@ -131,7 +122,6 @@ function openChannel(chat: any) {
     emit('openChat', [chat.type, chat])
 }
 
-// Personal chat creation moved to the modal (a named personal room).
 async function createPersonal(name: string) {
     console.log("[User.vue] createPersonal called with", name)
     await groupClass.createPersonal('', name)
@@ -139,7 +129,6 @@ async function createPersonal(name: string) {
     await loadAll()
 }
 
-// Invite link for any room (group OR personal) — joinable via /rooms/join.
 function inviteFor(id: string): string {
     return `krampus://join/${id}`
 }
@@ -154,7 +143,6 @@ async function copyInviteId(id: string) {
     }
 }
 
-// Invite link for the currently open group.
 const inviteLink = computed(() => activeGroup.value ? inviteFor(activeGroup.value.id) : '')
 const copyInvite = () => activeGroup.value && copyInviteId(activeGroup.value.id)
 
@@ -167,7 +155,6 @@ async function joinByLink() {
     if (room) console.log("[User.vue] joined", room)
 }
 
-// Create a named channel inside the currently open group (persisted as a room).
 const newChannelName = ref('')
 async function createChannel(type: 'chat' | 'voice') {
     const g = activeGroup.value
@@ -175,20 +162,15 @@ async function createChannel(type: 'chat' | 'voice') {
     const name = (newChannelName.value || '').trim()
     if (!name) return
     const encoded = `${g.id}${CHANNEL_SEP}${name}`
-    // include the group's current members so everyone already in the group
-    // gets the new channel too (late joiners are added on /rooms/join).
     await groupClass.createChat(encoded, type === 'voice' ? 'video_call' : 'private', '', g.id, g.members ?? [])
     newChannelName.value = ''
     await loadAll()
-    // rebuild the open group's channel list from the refreshed rooms
     activeGroup.value = buildChannels(String(g.id), g.username)
 }
 </script>
 
 <template>
-    <!-- Channel sidebar for a selected group (Discord-like) -->
     <article v-if="activeGroup" class="flex flex-col relative min-h-screen">
-        <!-- Group header -->
         <article class="flex flex-row items-center gap-3 px-3 py-4 border-b border-body-100">
             <svg @click.stop="activeGroup = null" class="cursor-pointer flex-shrink-0"
                 width="20" height="20" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -204,7 +186,6 @@ async function createChannel(type: 'chat' | 'voice') {
         </article>
 
         <section class="flex flex-col gap-1 px-2 pt-4 overflow-y-auto scrollbar-hide scroll-smooth pb-4">
-            <!-- collapsible folder -->
             <article class="flex flex-row items-center justify-between px-2 py-2 cursor-pointer hover:bg-white/5 rounded"
                 @click.stop="folderOpen = !folderOpen">
                 <section class="flex flex-row items-center gap-2">
@@ -215,7 +196,6 @@ async function createChannel(type: 'chat' | 'voice') {
                 </section>
             </article>
 
-            <!-- channels -->
             <article v-show="folderOpen" class="flex flex-col gap-1 pl-3">
                 <article v-for="chat in activeGroup.chat[activeGroup.username]" :key="chat.id"
                     @click.stop="openChannel(chat)"
@@ -230,7 +210,6 @@ async function createChannel(type: 'chat' | 'voice') {
                 </article>
             </article>
 
-            <!-- create channel form (always visible) -->
             <section class="flex flex-col gap-2 mt-3 pl-3">
                 <input v-model="newChannelName" placeholder="Название канала"
                     class="border border-white/30 bg-inherit text-white text-[14px] rounded px-2 py-1 placeholder:text-white/30 focus:outline-none">
@@ -246,7 +225,6 @@ async function createChannel(type: 'chat' | 'voice') {
                 </section>
             </section>
 
-            <!-- invite link -->
             <section class="flex flex-col gap-1 mt-6 px-1">
                 <p class="text-white/50 text-[13px] font-bold uppercase tracking-wider">Пригласительная ссылка</p>
                 <section class="flex flex-row gap-2 items-center">
@@ -262,14 +240,12 @@ async function createChannel(type: 'chat' | 'voice') {
 
     </article>
 
-    <!-- User list (default) -->
     <article v-else class="flex flex-col pt-10 px-2 overflow-y-auto scrollbar-hide scroll-smooth">
         <ModalCreateGroup v-if="activeCreateDialog"
             @createGroup="(name: string) => createGroup(name)"
             @createPersonal="(name: string) => createPersonal(name)"
             @dropDialog="activeCreateDialog = false" />
 
-        <!-- Join a room by invite link -->
         <section class="flex flex-row gap-2 mb-6">
             <input v-model="joinLink" placeholder="krampus://join/… или id комнаты"
                 class="flex-1 border border-white/30 bg-inherit text-white text-[13px] rounded px-2 py-1 placeholder:text-white/30 focus:outline-none">
@@ -280,7 +256,6 @@ async function createChannel(type: 'chat' | 'voice') {
         </section>
 
         <section class="flex flex-col gap-6">
-            <!-- Created rooms: groups and personal chats -->
             <section
                 class="flex hover:bg-white/10 flex-row justify-between items-center w-full group/room"
                 v-for="room in displayRooms" :key="room.id">
@@ -289,7 +264,6 @@ async function createChannel(type: 'chat' | 'voice') {
                     <p class="text-[18px] text-white font-bold">
                         {{ room.name }}</p>
                 </section>
-                <!-- copy invite link for this room (group or personal) -->
                 <svg @click.stop="copyInviteId(room.id)" :title="inviteFor(room.id)"
                     class="w-6 h-6 fill-white/40 hover:fill-white cursor-pointer flex-shrink-0 mr-2"
                     viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -297,7 +271,6 @@ async function createChannel(type: 'chat' | 'voice') {
                 </svg>
             </section>
 
-            <!-- Users -->
             <section @click.stop="handleClick(el)"
                 class="flex hover:bg-white/10 flex-row justify-between jutify-center items-center w-full cursor-pointer"
                 v-for="el in allUser" :key="el.id">
@@ -309,7 +282,6 @@ async function createChannel(type: 'chat' | 'voice') {
             </section>
         </section>
 
-        <!-- Floating create button -->
         <article class="sticky bottom-4 self-end mt-6 bg-body-900 p-2 rounded-full cursor-pointer hover:bg-white/10 shadow-lg" @click.stop="activeCreateDialog = true">
             <svg width="35" height="35" viewBox="0 0 35 35" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M27.7082 20.4166C28.0949 20.4166 28.4659 20.5703 28.7394 20.8438C29.0129 21.1173 29.1665 21.4882 29.1665 21.875V26.25H33.5415C33.9283 26.25 34.2992 26.4036 34.5727 26.6771C34.8462 26.9506 34.9998 27.3215 34.9998 27.7083C34.9998 28.0951 34.8462 28.466 34.5727 28.7395C34.2992 29.013 33.9283 29.1666 33.5415 29.1666H29.1665V33.5416C29.1665 33.9284 29.0129 34.2993 28.7394 34.5728C28.4659 34.8463 28.0949 35 27.7082 35C27.3214 35 26.9505 34.8463 26.677 34.5728C26.4035 34.2993 26.2498 33.9284 26.2498 33.5416V29.1666H21.8748C21.4881 29.1666 21.1171 29.013 20.8436 28.7395C20.5701 28.466 20.4165 28.0951 20.4165 27.7083C20.4165 27.3215 20.5701 26.9506 20.8436 26.6771C21.1171 26.4036 21.4881 26.25 21.8748 26.25H26.2498V21.875C26.2498 21.4882 26.4035 21.1173 26.677 20.8438C26.9505 20.5703 27.3214 20.4166 27.7082 20.4166Z" fill="white" />

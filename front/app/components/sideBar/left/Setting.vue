@@ -23,7 +23,6 @@ async function onAvatarPick(e: Event) {
     })
     try {
         await apiClient.uploadAvatar(dataUrl)
-        // reflect immediately in the store + local view
         const store = useUserStore()
         if (store.userData) store.userData.logo = dataUrl
         if (userStor.value) userStor.value.logo = dataUrl

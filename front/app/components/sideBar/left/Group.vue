@@ -32,13 +32,6 @@ async function createGroup(name: string) {
     groupName.value = await groupClass.requestGroup()
 }
 
-/*watch(groupName, async (oldValue, newValue) => {
-    if (oldValue !== newValue) {
-        groupName.value = await groupClass.requestGroup()
-        console.log(groupName.value)
-    }
-})*/
-
 const activeGroup = ref();
 
 const optionGroup = ref()

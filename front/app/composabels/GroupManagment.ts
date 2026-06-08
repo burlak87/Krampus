@@ -13,7 +13,6 @@ export class GroupManagment {
         return true
     }
 
-    // POST /api/v1/chat/rooms — a "group" is a room of type "group".
     async createGroup(nameGroup: String): Promise<Room | null> {
         const payload = {
             id: crypto.randomUUID(),
@@ -31,8 +30,6 @@ export class GroupManagment {
         }
     }
 
-    // POST /api/v1/chat/rooms — a 1-on-1 personal chat. The creator is added
-    // automatically by the backend; we pass the other participant in members.
     async createPersonal(userId: string, name: string): Promise<Room | null> {
         const payload: any = {
             id: crypto.randomUUID(),
@@ -51,7 +48,6 @@ export class GroupManagment {
         }
     }
 
-    // POST /api/v1/chat/rooms — generic room creation (used for sub-chats).
     async createChat(nameChat: string, typeChat: string, _idFolder: string, _idRoom: string, members: string[] = []): Promise<Room | null> {
         const type: RoomType = (["personal", "private", "group", "video_call"] as const)
             .includes(typeChat as RoomType) ? (typeChat as RoomType) : "private"
@@ -64,8 +60,6 @@ export class GroupManagment {
         }
     }
 
-    // Folders, roles, and per-room user management have no REST operation in the
-    // OpenAPI spec, so they are not part of the integration layer.
     createFolder(_nameFolder: string, _idRoom: string) {}
     createRole(_nameRole: string, _setting: object, _idRoom: string) {}
     settingGroup() {}
@@ -73,7 +67,6 @@ export class GroupManagment {
     requreAllRole(_idGroup: string) {}
     deleteRoleInGroup(_idGroup: string, _idRole: string) {}
 
-    // GET /api/v1/chat/users
     async requreAllUser(): Promise<ApiUser[]> {
         try {
             return await apiClient.listUsers()
@@ -82,7 +75,6 @@ export class GroupManagment {
         }
     }
 
-    // GET /api/v1/chat/rooms/{room_id}
     async openGroup(idGroup: string): Promise<Room | null> {
         try {
             return await apiClient.getRoom(idGroup)
@@ -91,7 +83,6 @@ export class GroupManagment {
         }
     }
 
-    // GET /api/v1/chat/rooms
     async requestGroup(): Promise<Room[]> {
         try {
             return await apiClient.listRooms()
@@ -100,7 +91,6 @@ export class GroupManagment {
         }
     }
 
-    // POST /api/v1/chat/rooms/join — accepts a deep link or a bare room id.
     async addNewUser(idGroup: string, _userEmail: string): Promise<Room | null> {
         try {
             const res = await apiClient.joinRoom({ token: idGroup })
@@ -110,7 +100,6 @@ export class GroupManagment {
         }
     }
 
-    // GET /api/v1/chat/rooms/{room_id}/messages
     async requreAllMessageGroup(idGroup: string) {
         try {
             return await apiClient.getRoomMessages(idGroup)

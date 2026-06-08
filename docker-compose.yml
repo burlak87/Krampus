@@ -1,23 +1,4 @@
-# ─────────────────────────────────────────────────────────────────────────────
-# Krampus — full local stack for testing
-#
-# Services:
-#   app       — Go backend  → http://localhost:8080
-#   frontend  — static UI   → http://localhost:3000
-#   postgres, redis, zookeeper, kafka, minio
-#
-# Usage:
-#   cp .env.example .env        # first time only
-#   docker-compose up -d --build
-#   docker-compose down -v      # remove containers + volumes
-# ─────────────────────────────────────────────────────────────────────────────
-
 services:
-
-  # ---------------------------------------------------------------------------
-  # Application
-  # ---------------------------------------------------------------------------
-
   app:
     build:
       context: .
@@ -68,7 +49,6 @@ services:
     networks:
       - krampus-net
 
-  # Standalone WebRTC call-signaling server (separate Go module).
   call:
     build:
       context: ./front/server/api
@@ -80,9 +60,6 @@ services:
     networks:
       - krampus-net
 
-  # Nuxt 3 dev server. NUXT_PUBLIC_* point at localhost:8080 because they are
-  # consumed by the BROWSER (running on the host), which reaches the backend
-  # via its published port — not over the compose network.
   frontend:
     image: node:22-alpine
     container_name: krampus_frontend
@@ -102,10 +79,6 @@ services:
     networks:
       - krampus-net
 
-  # ---------------------------------------------------------------------------
-  # Infrastructure
-  # ---------------------------------------------------------------------------
-
   postgres:
     image: postgres:17-alpine
     container_name: krampus_postgres
@@ -114,8 +87,6 @@ services:
       POSTGRES_USER:     ${POSTGRES_USER:-krampus}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-krampus_pass}
     ports:
-      # Host 5433 → container 5432 (host 5432 is taken by a local Postgres).
-      # The app reaches Postgres internally as postgres:5432 regardless.
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -135,7 +106,6 @@ services:
     container_name: krampus_redis
     command: redis-server --save 60 1 --loglevel warning
     ports:
-      # Host 6380 → container 6379 (host 6379 is taken by a local Redis).
       - "6380:6379"
     volumes:
       - redis_data:/data
@@ -159,7 +129,6 @@ services:
       - zookeeper_data:/var/lib/zookeeper/data
       - zookeeper_log:/var/lib/zookeeper/log
     healthcheck:
-      # Use "srvr" (enabled by default); "ruok" is not in this image's whitelist.
       test: ["CMD-SHELL", "echo srvr | nc localhost 2181 | grep -q Mode"]
       interval: 10s
       timeout: 5s
@@ -201,8 +170,6 @@ services:
     container_name: krampus_minio
     command: server /data --console-address ":9001"
     ports:
-      # Host 9100/9101 → container 9000/9001 (host 9000/9001 are taken).
-      # The app uses minio internally via http://minio:9000.
       - "9100:9000"
       - "9101:9001"
     environment:

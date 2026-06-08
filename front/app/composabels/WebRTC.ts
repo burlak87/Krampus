@@ -55,7 +55,7 @@ export class WebRTC extends Signaling {
                     if (data.action === "Active") {
                         this.#reactionAnswerActive(data)
                     } else if (data.action === "Expectation") {
-                        // Пока пусто
+              
                     } else if (data.action === "checkUserActive") {
 
                         await this.#reactionAnswerCheckUser(data)
@@ -211,11 +211,6 @@ export class WebRTC extends Signaling {
         let offer = await this.#callStore.newUserPC(data).PeerConectionICE.createOffer()
         await this.#callStore.newUserPC(data).PeerConectionICE.setLocalDescription(offer)
         console.log("Отправили оффер: ", data.idUserTarget)
-        /*if (this.#callStore.peerConnectionUsers.size >= 3) {
-            this.#callStore.peerConnectionUsers.forEach((pc) => {
-                this.#callStore.newUserPC(data).PeerConectionMCU = new RTCPeerConnection(this)
-            })
-        }*/
         this.sendSignalAnswer(data.idUserTarget, this.#User.userData?.id, "checkUserActive", "Sent", offer)
     }
 
@@ -250,13 +245,9 @@ export class WebRTC extends Signaling {
 
 
         setTimeout(() => {
-            /*if (6 > peerConnectionUsers.size >= 3) {
-                peerConnectionUsers.forEach((pc) => {
-                    pc.PeerConectionMCU = new RTCPeerConnection(configuration)
-                })
-            }*/
+            
             this.sendSignalStatusUser("Active")
-            //createListEvent(stream, peerConnectionUsers)
+            
         }, 500)
     }
 

@@ -12,7 +12,6 @@ class Auth {
         this.#userStore = useUserStore()
     }
 
-
     async register(username: string, email: string, password: string): Promise<AuthRespons> {
         try {
             await apiClient.signup({ username, email, password })
@@ -75,7 +74,6 @@ class Auth {
         }
     }
 
-
     async #loadCurrentUser(accessToken: string) {
         const userId = this.#userIdFromToken(accessToken)
         if (!userId) return
@@ -96,7 +94,6 @@ class Auth {
             }
             this.#userStore.userData = mapped
         } catch {
-          
         }
     }
 
@@ -111,7 +108,6 @@ class Auth {
         }
     }
 
-
     async restoreSession(): Promise<boolean> {
         if (this.#userStore.userData != undefined) return true
         if (typeof localStorage === "undefined") return false
@@ -120,7 +116,6 @@ class Auth {
         await this.#loadCurrentUser(token)
         return this.#userStore.userData != undefined
     }
-
 
     async verifyTwoFA(tempToken: string, code: string): Promise<AuthRespons> {
         try {
@@ -138,7 +133,6 @@ class Auth {
         try {
             await apiClient.logout(password)
         } catch {
-
         }
         clearTokens()
         this.#userStore.userData = undefined

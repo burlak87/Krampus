@@ -71,8 +71,6 @@ func (rs *RoomService) CanSendMessage(ctx context.Context, room *domain.Room, us
 
 	switch room.Type {
 	case domain.RoomPersonal:
-		// 1-on-1 chat: both participants (any member) may send. Membership was
-		// already verified above.
 		return true
 	case domain.RoomPrivate:
 		return true
@@ -100,7 +98,6 @@ func (rs *RoomService) isRoomMember(room *domain.Room, userID string) bool {
 	return false
 }
 
-// Заглушка, написать логику проверки статуса звонка
 func (rs *RoomService) isCallActive(room *domain.Room) bool {
 	if room.Type != domain.RoomVideoCall {
 		return false

@@ -45,11 +45,6 @@ func NewProducer(cfg config.KafkaConfig, logger logging.Logger) (*Producer, erro
 }
 
 func (p *Producer) Publish(ctx context.Context, msg *domain.BaseMessage) error {
-	// data, err := json.Marshal(msg)
-	// if err != nil {
-	// 	return err
-	// }
-
 	event := struct {
 		ID        string          `json:"id"`
 		Type      string          `json:"type"`

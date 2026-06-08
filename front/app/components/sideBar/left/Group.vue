@@ -1,108 +1,55 @@
 <script lang="ts" setup>
 import { GroupManagment } from '~/composabels/GroupManagment';
 import { WebRTC } from '~/composabels/WebRTC';
-import type { Room } from '~~/types/api/respons';
-import { type CallParticipant, type genericRef } from '~~/types/other';
-import { User } from '~/composabels/User'
-import { apiClient } from '~/composabels/apiClient'
+import type { CallParticipant, genericRef, User } from '~~/types/other';
 
 
 
 let groupClass: GroupManagment;
 const WebSocketCall = ref([])
-const groupData: genericRef<Room[]> = ref([])
+const groupName = ref()
 const activeCreateDialog: genericRef<boolean> = ref(false)
 const activeCreateChatDialog: genericRef<boolean> = ref(false)
 const activeUserInWebRTCCall: genericRef<[{ id: String, users: [CallParticipant] }?]> = ref([])
 const activeRoleSetting = ref()
 const user = useUserStore()
 const addUserEmail = ref()
-const allRoom: genericRef<Room[]> = ref()
 const activeModelCreateRole = ref()
 const settingUser = useSettingUser()
-const rooms = ref<any[]>([])
-const userClass = new User
-const allUser = ref<any[]>([])
-const groupAvatarInput = ref<HTMLInputElement | HTMLInputElement[] | null>(null)
-
-
-
 
 onMounted(async () => {
     groupClass = new GroupManagment()
-    console.log(await groupClass.requestGroup())
-    allRoom.value = await groupClass.requestGroup()
-    groupData.value.push(...(await groupClass.requestGroup()).filter((el) => el.type == "group"))
-    console.log(groupData.value)
+
+    groupName.value = await groupClass.requestGroup()
+    console.log(groupName.value)
 
 })
 
-function pickGroupAvatar(g: string) {
-     const inputs = groupAvatarInput.value
-    if (!inputs) return
-
-    if (Array.isArray(inputs)) {
-        inputs.forEach((input) => {
-            
-            if(input.id == g) {
-                input.click()
-            }
-        })
-    } else {
-        inputs.click()
-    }
-    
-    console.log(groupAvatarInput.value)
-    
+async function createGroup(name: string) {
+    console.log("[Group.vue] createGroup called with", name)
+    await groupClass.createGroup(name)
+    activeCreateDialog.value = false
+    groupName.value = await groupClass.requestGroup()
 }
-
-async function onGroupAvatarPick(group: Room, e: Event) {
-    const file = (e.target as HTMLInputElement).files?.[0]
-    const g = group
-    if (!file || !g?.id) return
-    const dataUrl: string = await new Promise((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload = () => resolve(String(reader.result))
-        reader.onerror = reject
-        reader.readAsDataURL(file)
-    })
-    try {
-        await apiClient.setRoomAvatar(String(g.id), dataUrl)
-        g.avatar = dataUrl
-        await loadAll()
-    } catch (err) {
-        console.error("[group avatar] upload failed", err)
-    }
-}
-
-
-
-
-
-/*watch(groupName, async (oldValue, newValue) => {
-    if (oldValue !== newValue) {
-        groupName.value = await groupClass.requestGroup()
-        console.log(groupName.value)
-    }
-})*/
 
 const activeGroup = ref();
 
 const optionGroup = ref()
 
-async function checkUserCall(group: Room) {
-    if (!group) return
-    roomGroup.value.forEach(async (room) => {
-        if ("id" in room && room.type == "video_call") {
-            console.log(room)
-            await WebSocketCall.value.push(markRaw(new WebRTC(room.id, "preliminary")))
-        }
+function checkUserCall(group: object) {
+
+    (Object.values(group.chat)).forEach((el) => {
+        el.forEach(async (room) => {
+            if ("id" in room && room.type == "voice") {
+                console.log(room)
+                await WebSocketCall.value.push(markRaw(new WebRTC(room.id, "preliminary")))
+            }
+        });
     })
 
     console.log(WebSocketCall.value)
 
-    const userGroup = await groupClass.requreAllUser()
-    console.log(userGroup)
+    const userGroup = groupClass.requreAllUser()
     console.log(userGroup)
     const user = useUserStore()
     console.log('WebSocketCall.value length:', WebSocketCall.value.length)
@@ -124,7 +71,7 @@ async function checkUserCall(group: Room) {
                         if ((activeUserInWebRTCCall.value.filter((active) => active?.id == idRoom)).length) {
                             activeUserInWebRTCCall.value.forEach((userRoom) => {
                                 if (userRoom?.id == el.getIdRoom()) {
-                                    userRoom.users.push({ ...user, audio: true, video: false, muth: false })
+                                    userRoom.users.push(user)
                                 }
                             })
                         } else {
@@ -149,10 +96,8 @@ async function checkUserCall(group: Room) {
                     if (activeUserInWebRTCCall.value?.filter((userRoom) => userRoom.id == data.idRoom).length) {
                         activeUserInWebRTCCall.value?.forEach(userRoom => {
                             if (userRoom.id == data.idRoom) {
-                                console.log(userRoom)
-                                console.log(data.idUserTarget)
-                                const indexUser = userRoom?.users.findIndex(user => user.id == data.idUserTarget)
-                                console.log(indexUser)
+                                const indexUser = userRoom?.users.findIndex(user => user.id === data.idUserTarget)
+
                                 if (indexUser !== -1 && indexUser != undefined) {
                                     userRoom.users[indexUser] = {
                                         ...userRoom.users[indexUser],
@@ -219,45 +164,11 @@ watch(activeUserInWebRTCCall, () => {
     console.log(activeUserInWebRTCCall.value)
 }, { deep: true })
 
-function inviteFor(id: string): string {
-    return `krampus://join/${id}`
+
+function openOptionChat() {
+
 }
 
-
-const inviteLink = computed(() => activeGroup.value ? inviteFor(activeGroup.value.id) : '')
-
-
-async function copyInviteId(id: string) {
-    const link = inviteFor(id)
-    try {
-        await navigator.clipboard.writeText(link)
-        console.log("[User.vue] invite copied", link)
-    } catch (e) {
-        console.error("[User.vue] copy failed", e)
-    }
-}
-
-const copyInvite = () => activeGroup.value && copyInviteId(activeGroup.value.id)
-
-
-const roomGroup = computed(() => {
-    const returnRoom: Room[] = []
-    if (allRoom.value?.length) {
-        allRoom.value.forEach((room) => {
-            console.log(room.id)
-            if (room.name.split("::").length == 2 && room.name.split("::")[0] == activeGroup.value.id) {
-                console.log(room)
-                returnRoom.push(room)
-            }
-        })
-    }
-
-    return returnRoom
-})
-
-watch(roomGroup, () => {
-    console.log(roomGroup.value)
-})
 
 watch(activeGroup, async () => {
     for (let el of WebSocketCall.value) {
@@ -278,70 +189,12 @@ function returnArrayUserCall(id) {
     return data.users
 }
 
-const isChannelRoom = (r: any) => typeof r?.name === 'string' && r.name.includes('::')
-
-function buildChannels(id: string, name: string, members: string[] = [], avatar = '') {
-    const channels = rooms.value
-        .filter((r: any) => isChannelRoom(r) && r.name.startsWith(id + '::'))
-        .map((r: any) => ({
-            id: r.id,
-            name: r.name.split('::').slice(1).join('::'),
-            type: r.type === 'video_call' ? 'voice' : 'chat',
-            newMessage: false,
-        }))
-    return { id, name, username: name, members, avatar, chat: { [name]: channels } }
-}
-
-async function loadAll() {
-    allUser.value = await userClass.getAllUser()
-    rooms.value = await groupClass.requestGroup()
-    
-    if (activeGroup.value) {
-        const g = activeGroup.value
-        activeGroup.value = buildChannels(String(g.id), g.username, g.members ?? [], g.avatar ?? '')
-    }
-}
-
-async function createPersonal(name: string) {
-    console.log("[User.vue] createPersonal called with", name)
-    await groupClass.createPersonal('', name)
-    activeCreateDialog.value = false
-    await loadAll()
-}
-
-async function createGroup(name: string) {
-    console.log("[User.vue] createGroup called with", name)
-    await groupClass.createGroup(name)
-    activeCreateDialog.value = false
-    await loadAll()
-}
-
-async function createChannel(type: 'chat' | 'voice', newChannelName: string) {
-    const g = activeGroup.value
-    if (!g) return
-    const name = (newChannelName || '').trim()
-    if (!name) return
-    const encoded = `${g.id}${'::'}${name}`
-
-    await groupClass.createChat(encoded, type === 'voice' ? 'video_call' : 'private', '', g.id, g.members ?? [])
-    await loadAll()
-
-    activeGroup.value = buildChannels(String(g.id), g.username)
-}
-
-
 </script>
 
 <template>
-    <ModalCreateGroup v-if="activeCreateDialog" @createGroup="(name: string) => createGroup(name)"
-        @createPersonal="(name: string) => createPersonal(name)" @dropDialog="activeCreateDialog = false" />
-    <ModalCreateChat
-        @createFolder="async (nameFolder: string) => { await groupClass.createFolder(nameFolder, activeGroup.id) }"
-        @createChat="(nameChat: string, typeChat: 'chat' | 'voice') => { createChannel(typeChat, nameChat)}"
-        @dropDialog="activeCreateChatDialog = false" v-if="activeCreateChatDialog"></ModalCreateChat>
-    <ModalCreateRole
-        @createRole="async (nameRole: string, settingRole: object) => { await groupClass.createRole(nameRole, settingRole, activeGroup.id) }"
-        v-if="activeModelCreateRole" @dropDialog="activeModelCreateRole = false" />
+    <ModalCreateGroup @createGroup="(nameGroup: string) => createGroup(nameGroup)" @dropDialog="activeCreateDialog = false" v-if="activeCreateDialog" />
+    <ModalCreateChat @createFolder="async (nameFolder: string) => { await groupClass.createFolder(nameFolder, activeGroup.id)}" @createChat="(nameChat: string, typeChat: string, idFolder: string) => {groupClass.createChat(nameChat, typeChat, idFolder, activeGroup.id)}" :folderGroup="() => {/*Тут должна быть какая-то логика, но я хз, напиши*/}" @dropDialog="activeCreateChatDialog = false" v-if="activeCreateChatDialog"></ModalCreateChat>
+    <ModalCreateRole @createRole="async (nameRole: string, settingRole: object) => {await groupClass.createRole(nameRole, settingRole, activeGroup.id)}" v-if="activeModelCreateRole" @dropDialog="activeModelCreateRole = false"/>
     <article :class="{
         grid: activeGroup,
         'h-screen': true,
@@ -373,24 +226,20 @@ async function createChannel(type: 'chat' | 'voice', newChannelName: string) {
                     'justify-start': !activeGroup,
                     'items-center': true,
                     'w-full': !activeGroup,
-                }" v-for="group in groupData" :key="group.id" @click.stop="
-                    async () => {
-                        activeGroup = await groupClass.openGroup(group.id);
+                }" v-for="el in groupName" :key="el.id" @click.stop="
+                    () => {
+                        activeGroup = groupClass.openGroup(el.id);
                         console.log(activeGroup)
                     }
                 ">
-                    <img @click.stop="pickGroupAvatar(group.id)"  :src="group.avatar || group.logo || ''"
-                        class="w-11 h-11 rounded-full object-cover bg-white/10 cursor-pointer flex-shrink-0"
-                        title="Сменить фото группы">
-                    <input ref="groupAvatarInput" :id="group.id" type="file" accept="image/*" class="hidden"
-                        @change="onGroupAvatarPick(group, $event)">
+                    <img :src="el.src || ''" class="w-10 h-10 rounded-full bg-white/10" />
                     <p :class="{
                         'text-[18px]': true,
                         'text-white': true,
                         'font-bold': true,
                         'hidden': activeGroup,
                     }">
-                        {{ group.name }}
+                        {{ el.name }}
                     </p>
                 </article>
             </article>
@@ -436,19 +285,19 @@ async function createChannel(type: 'chat' | 'voice', newChannelName: string) {
                 <section
                     class="flex flex-col h-screen pb-50 gap-6 px-1 overflow-y-auto scrollbar-hide scroll-smooth w-full">
                     <article>
-                        <p class=" pl-1 text-[20px] text-white font-bold">{{ settingUser.language == 'Englend' ? 'Name group:' : 'Название группы:'}}</p>
+                        <p class=" pl-1 text-[20px] text-white font-bold">{{settingUser.language == 'Englend' ? 'Name group:' : 'Название группы:'}}</p>
                         <input
                             class="w-full border-b-3 border-white focus:outline-none placeholder:text-[20px] placeholder:text-white text-white text-[20px] py-2 pl-1"
                             :placeholder="activeGroup.name">
                     </article>
                     <article>
-                        <p class=" pl-1 text-[20px] text-white font-bold">{{ settingUser.language == 'Englend' ? 'Description group:' : 'Описание группы:' }}</p>
+                        <p class=" pl-1 text-[20px] text-white font-bold">{{settingUser.language == 'Englend' ? 'Description group:' : 'Описание группы:'}}</p>
                         <textarea
                             class="box-border scrollbar-hide scroll-smooth resize-none  overflow-y-auto w-full border-b-3 border-white focus:outline-none placeholder:text-[20px] placeholder:text-white text-white text-[20px] py-2 pl-1"
                             :placeholder="activeGroup.description"></textarea>
                     </article>
                     <article>
-                        <p class=" pl-1 text-[20px] text-white font-bold">{{ settingUser.language == 'Englend' ? 'Users group:' : 'Пользователи группы:'}}</p>
+                        <p class=" pl-1 text-[20px] text-white font-bold">{{settingUser.language == 'Englend' ? 'Users group:' : 'Пользователи группы:'}}</p>
                         <section
                             class="w-full h-50 border-b-3 pt-2 border-white scrollbar-hide scroll-smooth resize-none  overflow-y-auto">
                             <OtherSideBarGroupSettingUser
@@ -457,7 +306,7 @@ async function createChannel(type: 'chat' | 'voice', newChannelName: string) {
                         </section>
                     </article>
                     <article>
-                        <p class="pl-1 text-[20px] text-white font-bold">{{ settingUser.language == 'Englend' ? 'Role group:' : 'Роли группы:'}}</p>
+                        <p class="pl-1 text-[20px] text-white font-bold">{{settingUser.language == 'Englend' ? 'Role group:' : 'Роли группы:'}}</p>
                         <section class="w-full h-50  pt-2  scrollbar-hide scroll-smooth resize-none  overflow-y-auto">
                             <OtherSideBarGroupSettingRole
                                 @settingRole="(roleData: object) => { activeRoleSetting = roleData }"
@@ -466,18 +315,17 @@ async function createChannel(type: 'chat' | 'voice', newChannelName: string) {
                         </section>
                         <section class="w-full flex border-b-3 border-white justify-center items-center p-2">
                             <button @click.stop="activeModelCreateRole = true"
-                                class="border-1 text-white/50 hover:text-white px-5 py-2 text-[20px]  border-white w-3/4 ">{{ settingUser.language == 'Englend' ? 'Create role' : 'Создать роль'}}</button>
+                                class="border-1 text-white/50 hover:text-white px-5 py-2 text-[20px]  border-white w-3/4 ">{{settingUser.language == 'Englend' ? 'Create role' : 'Создать роль'}}</button>
                         </section>
                     </article>
                     <article>
-                        <p class="pl-1 pb-5 text-[20px] text-white font-bold">{{ settingUser.language == 'Englend' ? 'Add user:' : 'Добавить пользователя:'}}</p>
+                        <p class="pl-1 pb-5 text-[20px] text-white font-bold">{{settingUser.language == 'Englend' ? 'Add user:' : 'Добавить пользователя:'}}</p>
                         <input v-model="addUserEmail"
                             class="w-full pb-4 focus:outline-none placeholder:text-[20px] placeholder:text-white text-white text-[20px] py-2 pl-1"
                             :placeholder="settingUser.language == 'Englend' ? 'emailUser' : 'Почта пользователя'">
                         <section class="w-full flex justify-center p-2 border-b-3 border-white">
                             <button @click.stop="groupClass.addNewUser(activeGroup.id, addUserEmail)"
-                                class="border-1 text-white/50 hover:text-white px-5 py-2 text-[20px]  border-white w-3/4 ">{{ settingUser.language ==
-                                    'Englend' ? 'Add user:' : 'Добавить пользователя:'}}</button>
+                                class="border-1 text-white/50 hover:text-white px-5 py-2 text-[20px]  border-white w-3/4 ">{{settingUser.language == 'Englend' ? 'Add user:' : 'Добавить пользователя:'}}</button>
                         </section>
                     </article>
                 </section>
@@ -486,16 +334,16 @@ async function createChannel(type: 'chat' | 'voice', newChannelName: string) {
                 <article class="flex flex-row justify-between px-4 py-2 border-b-4 border-body-100">
                     <section class="flex flex-col gap-1 text-start">
                         <h2 class="text-[26px] text-white/80">{{ activeGroup.name }}</h2>
-                        <p class="text-[16px] text-white">{{ activeGroup.members.length }} {{ settingUser.language == 'Englend' ? 'members' : 'пользователей' }}</p>
+                        <p class="text-[16px] text-white">{{ activeGroup.users }} {{settingUser.language == 'Englend' ? 'members' : 'пользователей'}}</p>
                     </section>
                     <section class="flex flex-row gap-10 justify-center items-center">
-                        <svg v-if="activeGroup.owner_id == user.userData.id" @click="optionGroup = true" width="7"
-                            height="34" viewBox="0 0 7 34" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <svg @click="optionGroup = true" width="7" height="34" viewBox="0 0 7 34" fill="none"
+                            xmlns="http://www.w3.org/2000/svg">
                             <path fill-rule="evenodd" clip-rule="evenodd"
                                 d="M0 3.33333C0 4.21739 0.35119 5.06523 0.976311 5.69036C1.60143 6.31548 2.44928 6.66667 3.33333 6.66667C4.21739 6.66667 5.06523 6.31548 5.69036 5.69036C6.31548 5.06523 6.66667 4.21739 6.66667 3.33333C6.66667 2.44928 6.31548 1.60143 5.69036 0.976311C5.06523 0.351189 4.21739 0 3.33333 0C2.44928 0 1.60143 0.351189 0.976311 0.976311C0.35119 1.60143 0 2.44928 0 3.33333ZM3.33333 20C2.44928 20 1.60143 19.6488 0.976311 19.0237C0.35119 18.3986 0 17.5507 0 16.6667C0 15.7826 0.35119 14.9348 0.976311 14.3096C1.60143 13.6845 2.44928 13.3333 3.33333 13.3333C4.21739 13.3333 5.06523 13.6845 5.69036 14.3096C6.31548 14.9348 6.66667 15.7826 6.66667 16.6667C6.66667 17.5507 6.31548 18.3986 5.69036 19.0237C5.06523 19.6488 4.21739 20 3.33333 20ZM3.33333 33.3333C2.44928 33.3333 1.60143 32.9821 0.976311 32.357C0.35119 31.7319 0 30.8841 0 30C0 29.1159 0.35119 28.2681 0.976311 27.643C1.60143 27.0179 2.44928 26.6667 3.33333 26.6667C4.21739 26.6667 5.06523 27.0179 5.69036 27.643C6.31548 28.2681 6.66667 29.1159 6.66667 30C6.66667 30.8841 6.31548 31.7319 5.69036 32.357C5.06523 32.9821 4.21739 33.3333 3.33333 33.3333Z"
                                 fill="white" />
                         </svg>
-                        <svg @click="" width="34" height="40" viewBox="0 0 34 40" fill="none"
+                        <svg @click="async () => {await groupClass.liveGroup(user.userData?.id, activeGroup.id)}" width="34" height="40" viewBox="0 0 34 40" fill="none"
                             xmlns="http://www.w3.org/2000/svg">
                             <path
                                 d="M33.1767 19.169L26.9494 12.942C26.4903 12.4828 25.7473 12.4822 25.2881 12.9383C24.8277 13.3947 24.8234 14.1394 25.2777 14.6017L29.4329 18.8281H12.7054C12.0555 18.8281 11.5283 19.3499 11.5283 20C11.5283 20.6501 12.0555 21.1719 12.7054 21.1719H29.5027L25.2844 25.3928C24.8252 25.8523 24.8252 26.5993 25.2844 27.0588C25.5143 27.2886 25.8159 27.4044 26.1169 27.4044C26.4179 27.4044 26.7195 27.2898 26.9494 27.0599L33.1767 20.8331C33.3973 20.6124 33.5212 20.3131 33.5212 20.001C33.5212 19.689 33.3974 19.3897 33.1767 19.169Z"
@@ -508,8 +356,9 @@ async function createChannel(type: 'chat' | 'voice', newChannelName: string) {
                 </article>
                 <article class="h-screen pb-60">
                     <section class="flex flex-col h-full  gap-2 overflow-y-auto scrollbar-hide scroll-smooth w-full">
-                        <section class="flex flex-col gap-2 px-5 text-[22px] text-white">
-                            <!--<article @click="($event) => {
+                        <section class="flex flex-col gap-2 px-5 text-[22px] text-white"
+                            v-for="el in Object.keys(activeGroup.chat)" :key="activeGroup.id">
+                            <article @click="($event) => {
                                 const target = ($event.currentTarget as HTMLElement)
                                 if (target?.children[0]?.classList.contains('rotate-90')) {
                                     target?.parentElement?.children[1]?.classList.remove('hidden');
@@ -531,14 +380,15 @@ async function createChannel(type: 'chat' | 'voice', newChannelName: string) {
                                     <div class="w-[5px] h-[5px] rounded-full bg-white"></div>
                                     <div class="w-[5px] h-[5px] rounded-full bg-white"></div>
                                 </section>
-                            </article>-->
-                            <article class="flex flex-col gap-2 ">
+                            </article>
+                            <article class="flex flex-col gap-2 hidden">
                                 <article
                                     class="flex flex-col gap-2 hover:bg-white/10 p-2 justify-between pl-5 items-start"
-                                    @click='$emit("openChat", [r.type, r])' v-for="r in roomGroup" :key="r.id">
+                                    @click='$emit("openChat", [chat.type, chat])' v-for="chat in activeGroup.chat[el]"
+                                    :key="chat.id">
                                     <section class="flex flex-row gap-5 justify-between items-center">
                                         <article class="flex flex-row gap-5 justify-start items-center">
-                                            <svg v-if="r.type == 'private'" width="30" height="26" viewBox="0 0 28 24"
+                                            <svg v-if="chat.type == 'chat'" width="30" height="26" viewBox="0 0 28 24"
                                                 fill="none" xmlns="http://www.w3.org/2000/svg">
                                                 <path
                                                     d="M7.51444 2.13923C5.24165 3.56915 3.52251 5.66358 2.61795 8.10463C1.71338 10.5457 1.67276 13.2001 2.50226 15.6651C2.73218 16.385 2.70919 17.1485 2.27234 17.7594L0.364038 20.6391C0.141344 20.9684 0.0161075 21.3485 0.00145149 21.7396C-0.0132045 22.1307 0.0832618 22.5183 0.280739 22.8618C0.478216 23.2053 0.769432 23.4921 1.12388 23.6922C1.47832 23.8922 1.88294 23.9981 2.29534 23.9987H14.9407C18.3478 24.0454 21.6353 22.8088 24.0832 20.5597C26.531 18.3106 27.9395 15.2326 28 12C27.9395 8.7674 26.531 5.68935 24.0832 3.4403C21.6353 1.19124 18.3478 -0.0454209 14.9407 0.00127599C12.1817 0.00127599 9.60668 0.786646 7.51444 2.13923Z"
@@ -553,16 +403,17 @@ async function createChannel(type: 'chat' | 'voice', newChannelName: string) {
                                                     d="M18.95 17.8862C18.2375 18.1895 17.5 17.6695 17.5 16.987V16.8353C17.5 16.3695 17.85 15.9687 18.2875 15.7303C18.8138 15.4357 19.2465 15.0315 19.5462 14.5546C19.8458 14.0777 20.0028 13.5433 20.0028 13.0003C20.0028 12.4573 19.8458 11.923 19.5462 11.4461C19.2465 10.9692 18.8138 10.565 18.2875 10.2703C17.85 10.0212 17.5 9.62032 17.5 9.16532V9.01365C17.5 8.33115 18.2375 7.82199 18.95 8.11449C20.0135 8.55564 20.9113 9.24848 21.5397 10.113C22.1682 10.9776 22.5016 11.9785 22.5016 13.0003C22.5016 14.0221 22.1682 15.0231 21.5397 15.8876C20.9113 16.7522 20.0135 17.445 18.95 17.8862Z"
                                                     fill="white" />
                                             </svg>
-                                            <p>{{ r.name.split("::")[1] }}</p>
+                                            <p>{{ chat.name }}</p>
                                         </article>
-                                        <!--<div class="p-2 bg-white rounded-full" v-if="chat.newMessage"></div>-->
+                                        <div class="p-2 bg-white rounded-full" v-if="chat.newMessage">
+                                        </div>
                                     </section>
                                     <article class="flex flex-col gap-5"
-                                        v-if="activeUserInWebRTCCall.length && r.type == 'video_call'">
-                                        <section v-for="user in returnArrayUserCall(r.id)"
+                                        v-if="activeUserInWebRTCCall.length && chat.type == 'voice'">
+                                        <section v-for="user in returnArrayUserCall(chat.id)"
                                             class="flex flex-row items-center gap-5 pl-5" :key="user.id">
-                                            <img class="w-7 h-7 rounded-full" :src="user.avatar" alt="">
-                                            <p class="text-[15px] text-white font-bold">{{ user.username }}</p>
+                                            <img class="w-7 h-7 rounded-full" :src="user.logo" alt="">
+                                            <p class="text-[15px] text-white font-bold">{{ user.userName }}</p>
                                             <article class="flex flex-row gap-5 items-center"
                                                 v-if="!user.audio || user.muth || !user.video">
                                                 <svg v-if="!user.audio" width="20" height="20" viewBox="0 0 40 40"
@@ -590,31 +441,17 @@ async function createChannel(type: 'chat' | 'voice', newChannelName: string) {
                         </section>
                     </section>
                     <section
-                        class="sticky bottom-0 left-[100%] w-full py-4 px-2 flex flex-col gap-5 items-center flex justify-end bg-inherit">
-                        <article class="flex flex-col w-full items-end gap-1 mt-6 px-1">
-                            <p class="text-white/50 text-[13px] font-bold uppercase tracking-wider">Пригласительная
-                                ссылка</p>
-                            <section class="flex flex-row gap-2 items-center">
-                                <input :value="inviteLink" readonly
-                                    class="flex-1 border border-white/30 bg-inherit text-white/80 text-[13px] rounded px-2 py-1 focus:outline-none">
-                                <button type="button" @click.stop="copyInvite"
-                                    class="border border-white/30 text-white/60 hover:text-white hover:bg-white/10 rounded px-3 py-1 text-[14px]">
-                                    Копировать
-                                </button>
-                            </section>
-                        </article>
-                        <article class="flex w-full justify-end px-2">
-                            <section class="bg-body-900 p-2 rounded-full" @click.stop="activeCreateChatDialog = true">
-                                <svg width="35" height="35" viewBox="0 0 35 35" fill="none"
-                                    xmlns="http://www.w3.org/2000/svg">
-                                    <path
-                                        d="M27.7082 20.4166C28.0949 20.4166 28.4659 20.5703 28.7394 20.8438C29.0129 21.1173 29.1665 21.4882 29.1665 21.875V26.25H33.5415C33.9283 26.25 34.2992 26.4036 34.5727 26.6771C34.8462 26.9506 34.9998 27.3215 34.9998 27.7083C34.9998 28.0951 34.8462 28.466 34.5727 28.7395C34.2992 29.013 33.9283 29.1666 33.5415 29.1666H29.1665V33.5416C29.1665 33.9284 29.0129 34.2993 28.7394 34.5728C28.4659 34.8463 28.0949 35 27.7082 35C27.3214 35 26.9505 34.8463 26.677 34.5728C26.4035 34.2993 26.2498 33.9284 26.2498 33.5416V29.1666H21.8748C21.4881 29.1666 21.1171 29.013 20.8436 28.7395C20.5701 28.466 20.4165 28.0951 20.4165 27.7083C20.4165 27.3215 20.5701 26.9506 20.8436 26.6771C21.1171 26.4036 21.4881 26.25 21.8748 26.25H26.2498V21.875C26.2498 21.4882 26.4035 21.1173 26.677 20.8438C26.9505 20.5703 27.3214 20.4166 27.7082 20.4166Z"
-                                        fill="white" />
-                                    <path
-                                        d="M30.2751 18.3312C30.8584 18.7687 32.0689 18.5208 32.0834 17.7916V17.5C32.0842 15.2367 31.5582 13.0043 30.547 10.9794C29.5358 8.9546 28.0672 7.19291 26.2575 5.8338C24.4477 4.47469 22.3464 3.55546 20.12 3.14887C17.8935 2.74228 15.6029 2.85949 13.4296 3.49122C11.2563 4.12295 9.25981 5.25185 7.59822 6.7886C5.93663 8.32534 4.65552 10.2277 3.8563 12.3452C3.05707 14.4627 2.76167 16.7371 2.99346 18.9885C3.22525 21.2399 3.97788 23.4064 5.19178 25.3166C5.36678 25.5937 5.33761 25.9583 5.13344 26.2062L2.11469 29.6625C1.92972 29.873 1.80934 30.1324 1.76795 30.4096C1.72656 30.6868 1.76591 30.97 1.8813 31.2254C1.99669 31.4808 2.18323 31.6975 2.4186 31.8497C2.65396 32.0018 2.92818 32.0829 3.20844 32.0833H17.7918C18.5209 32.0687 18.7689 30.8583 18.3314 30.275C17.8583 29.6219 17.5749 28.8508 17.5125 28.0468C17.4501 27.2429 17.6111 26.4373 17.9778 25.7191C18.3444 25.0008 18.9024 24.3979 19.5902 23.9769C20.278 23.5559 21.0687 23.3332 21.8751 23.3333H22.6043C22.7977 23.3333 22.9831 23.2565 23.1199 23.1197C23.2566 22.983 23.3334 22.7975 23.3334 22.6041V21.875C23.3333 21.0686 23.556 20.2778 23.9771 19.59C24.3981 18.9023 25.001 18.3443 25.7192 17.9776C26.4374 17.6109 27.243 17.4499 28.047 17.5123C28.851 17.5747 29.6221 17.8581 30.2751 18.3312Z"
-                                        fill="white" />
-                                </svg>
-                            </section>
+                        class="sticky bottom-0 left-[100%] w-fit py-4 px-2 flex flex-row items-center flex justify-end bg-inherit">
+                        <article class="bg-body-900 p-2 rounded-full" @click.stop="activeCreateChatDialog = true">
+                            <svg width="35" height="35" viewBox="0 0 35 35" fill="none"
+                                xmlns="http://www.w3.org/2000/svg">
+                                <path
+                                    d="M27.7082 20.4166C28.0949 20.4166 28.4659 20.5703 28.7394 20.8438C29.0129 21.1173 29.1665 21.4882 29.1665 21.875V26.25H33.5415C33.9283 26.25 34.2992 26.4036 34.5727 26.6771C34.8462 26.9506 34.9998 27.3215 34.9998 27.7083C34.9998 28.0951 34.8462 28.466 34.5727 28.7395C34.2992 29.013 33.9283 29.1666 33.5415 29.1666H29.1665V33.5416C29.1665 33.9284 29.0129 34.2993 28.7394 34.5728C28.4659 34.8463 28.0949 35 27.7082 35C27.3214 35 26.9505 34.8463 26.677 34.5728C26.4035 34.2993 26.2498 33.9284 26.2498 33.5416V29.1666H21.8748C21.4881 29.1666 21.1171 29.013 20.8436 28.7395C20.5701 28.466 20.4165 28.0951 20.4165 27.7083C20.4165 27.3215 20.5701 26.9506 20.8436 26.6771C21.1171 26.4036 21.4881 26.25 21.8748 26.25H26.2498V21.875C26.2498 21.4882 26.4035 21.1173 26.677 20.8438C26.9505 20.5703 27.3214 20.4166 27.7082 20.4166Z"
+                                    fill="white" />
+                                <path
+                                    d="M30.2751 18.3312C30.8584 18.7687 32.0689 18.5208 32.0834 17.7916V17.5C32.0842 15.2367 31.5582 13.0043 30.547 10.9794C29.5358 8.9546 28.0672 7.19291 26.2575 5.8338C24.4477 4.47469 22.3464 3.55546 20.12 3.14887C17.8935 2.74228 15.6029 2.85949 13.4296 3.49122C11.2563 4.12295 9.25981 5.25185 7.59822 6.7886C5.93663 8.32534 4.65552 10.2277 3.8563 12.3452C3.05707 14.4627 2.76167 16.7371 2.99346 18.9885C3.22525 21.2399 3.97788 23.4064 5.19178 25.3166C5.36678 25.5937 5.33761 25.9583 5.13344 26.2062L2.11469 29.6625C1.92972 29.873 1.80934 30.1324 1.76795 30.4096C1.72656 30.6868 1.76591 30.97 1.8813 31.2254C1.99669 31.4808 2.18323 31.6975 2.4186 31.8497C2.65396 32.0018 2.92818 32.0829 3.20844 32.0833H17.7918C18.5209 32.0687 18.7689 30.8583 18.3314 30.275C17.8583 29.6219 17.5749 28.8508 17.5125 28.0468C17.4501 27.2429 17.6111 26.4373 17.9778 25.7191C18.3444 25.0008 18.9024 24.3979 19.5902 23.9769C20.278 23.5559 21.0687 23.3332 21.8751 23.3333H22.6043C22.7977 23.3333 22.9831 23.2565 23.1199 23.1197C23.2566 22.983 23.3334 22.7975 23.3334 22.6041V21.875C23.3333 21.0686 23.556 20.2778 23.9771 19.59C24.3981 18.9023 25.001 18.3443 25.7192 17.9776C26.4374 17.6109 27.243 17.4499 28.047 17.5123C28.851 17.5747 29.6221 17.8581 30.2751 18.3312Z"
+                                    fill="white" />
+                            </svg>
                         </article>
                     </section>
                 </article>
@@ -624,3 +461,5 @@ async function createChannel(type: 'chat' | 'voice', newChannelName: string) {
 </template>
 
 <style lang="scss" scoped></style>
+
+

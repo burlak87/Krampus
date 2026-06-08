@@ -48,13 +48,12 @@ func (f *FileStorage) SaveMessage(roomID string, msg *domain.BaseMessage) error 
 	defer buffer.mu.Unlock()
 
 	buffer.messages = append(buffer.messages, msg)
-	messageSize := int64(len(msg.Payload) + 100) // + метаданные
+	messageSize := int64(len(msg.Payload) + 100)
 
-	// 🔥 УМНАЯ СТРАТЕГИЯ FLUSH
 	shouldFlush := false
 	switch msg.Type {
 	case domain.TypeSystem, domain.TypeCommand:
-		shouldFlush = true // немедленная запись
+		shouldFlush = true
 
 	case domain.TypeText, domain.TypeFile:
 		buffer.size += messageSize
@@ -90,7 +89,6 @@ func (f *FileStorage) flushBuffer(roomID string, buffer *RoomBuffer) error {
 		return err
 	}
 
-	// 📝 Запись всех сообщений
 	for _, msg := range buffer.messages {
 		line := f.formatMessageLine(msg)
 		if _, err := buffer.writer.WriteString(line); err != nil {
@@ -106,7 +104,6 @@ func (f *FileStorage) flushBuffer(roomID string, buffer *RoomBuffer) error {
 		log.Printf("Failed to sync file: %v", err)
 	}
 
-	// 🧹 Очистка буфера
 	buffer.messages = buffer.messages[:0]
 	buffer.size = 0
 	buffer.lastFlush = time.Now()
@@ -136,30 +133,25 @@ func (f *FileStorage) ensureFile(roomID string, buffer *RoomBuffer) error {
 	return nil
 }
 
-// 🗂️ УМНАЯ СЕГМЕНТАЦИЯ ПО ТИПАМ КОМНАТ
 func (f *FileStorage) getSegmentPath(roomID string, t time.Time) string {
 	roomType := f.getRoomType(roomID)
 
 	switch roomType {
 	case chatDomain.RoomVideoCall:
-		// Видеозвонки: 1ч сегменты
 		return filepath.Join(f.basePath, "video_calls", roomID,
 			t.Format("2006-01-02"), fmt.Sprintf("%d.log", t.Hour()))
 
 	case chatDomain.RoomGroup:
-		// Групповые: 4ч сегменты
 		hour := (t.Hour() / 4) * 4
 		return filepath.Join(f.basePath, "groups", roomID,
 			t.Format("2006-01"), fmt.Sprintf("%s_%02d.log", t.Format("2006-01-02"), hour))
 
 	case chatDomain.RoomPrivate:
-		// Личные: 1 день + шардинг
 		shard := roomID[:2]
 		return filepath.Join(f.basePath, "private", shard, roomID,
 			t.Format("2006-01-02")+".log")
 
 	case chatDomain.RoomPersonal:
-		// Заметки: 1 месяц + шардинг
 		shard := roomID[:2]
 		return filepath.Join(f.basePath, "personal", shard, roomID,
 			t.Format("2006-01")+".log")

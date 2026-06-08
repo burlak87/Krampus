@@ -9,8 +9,6 @@ const activeSearch = ref(false)
 const editMessageStatus = ref(false)
 const rightSideBarType = ref('')
 
-// Client-side full-text search over loaded messages (the server search indexer
-// pipeline isn't running). Highlights matching message bubbles.
 const matchedIds = computed<Set<string>>(() => {
     const q = (searchData.value || '').trim().toLowerCase()
     if (!q) return new Set()
@@ -23,13 +21,11 @@ const messageClass = new messageManagment()
 const userClass = new UserComposable()
 const user = useUserStore()
 const props = defineProps(["Room"])
-// Room prop is the [type, roomObject] tuple emitted by the sidebar.
 const roomId = computed<string>(() => (props.Room?.[1]?.id ?? '') as string)
 
 const messageUser = ref<any[]>([])
 const userMap = ref<Record<string, string>>({})
 
-// Resolve user_id → username so messages show the sender's name.
 async function ensureUsers() {
     if (Object.keys(userMap.value).length) return
     const all = await userClass.getAllUser()
@@ -63,7 +59,6 @@ watch(roomId, () => {
     loadMessages()
 })
 
-// Light polling so the receiver sees incoming messages without a reload.
 let pollTimer: ReturnType<typeof setInterval> | undefined
 onMounted(() => { pollTimer = setInterval(loadMessages, 4000) })
 onUnmounted(() => { if (pollTimer) clearInterval(pollTimer) })

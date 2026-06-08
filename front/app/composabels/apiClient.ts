@@ -1,5 +1,3 @@
-
-
 import type {
     BanRequest,
     CreateRoomRequest,
@@ -118,9 +116,7 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
 }
 
 export const apiClient = {
-
     health: () => request<HealthResponse>("/health", { auth: false }),
-
 
     signup: (req: SignupRequest) =>
         request<User>("/api/v1/auth/signup", { method: "POST", body: req, auth: false }),
@@ -140,7 +136,6 @@ export const apiClient = {
     enableTwoFA: () =>
         request<SuccessResponse>("/api/v1/auth/enable", { method: "POST" }),
 
-
     sendMessage: (req: SendMessageRequest) =>
         request<SendMessageResponse>("/api/v1/chat/messages", { method: "POST", body: req }),
 
@@ -149,7 +144,6 @@ export const apiClient = {
 
     searchMessages: (roomId: string, q: string, limit?: number) =>
         request<SearchResult[]>(`/api/v1/chat/rooms/${roomId}/search`, { query: { q, limit } }),
-
 
     createRoom: (req: CreateRoomRequest) =>
         request<Room>("/api/v1/chat/rooms", { method: "POST", body: req }),
@@ -161,12 +155,10 @@ export const apiClient = {
     joinRoom: (req: JoinRoomRequest) =>
         request<JoinRoomResponse>("/api/v1/chat/rooms/join", { method: "POST", body: req }),
 
-
     listUsers: (limit?: number, offset?: number) =>
         request<User[]>("/api/v1/chat/users", { query: { limit, offset } }),
 
     getUser: (userId: string) => request<User>(`/api/v1/chat/users/${userId}`),
-
 
     votePoll: (roomId: string, pollId: string, req: VoteRequest) =>
         request<StatusResponse>(`/api/v1/chat/rooms/${roomId}/polls/${pollId}/vote`, {
@@ -177,20 +169,16 @@ export const apiClient = {
     getPoll: (roomId: string, pollId: string) =>
         request<PollResults>(`/api/v1/chat/rooms/${roomId}/polls/${pollId}`),
 
-
     addReaction: (messageId: string, req: ReactionRequest) =>
         request<StatusResponse>(`/api/v1/chat/messages/${messageId}/reactions`, {
             method: "POST",
             body: req,
         }),
 
-
     listStickers: () => request<StickerPack[]>("/api/v1/chat/stickers"),
-
 
     sync: (deviceId: string) =>
         request<SyncResponse>("/api/v1/chat/sync", { query: { device_id: deviceId } }),
-
 
     ban: (req: BanRequest) =>
         request<StatusResponse>("/api/v1/chat/moderation/ban", { method: "POST", body: req }),
@@ -198,18 +186,14 @@ export const apiClient = {
     mute: (req: MuteRequest) =>
         request<StatusResponse>("/api/v1/chat/moderation/mute", { method: "POST", body: req }),
 
-
     uploadAvatar: (avatar: string) =>
         request<Profile>("/api/v1/chat/profile/avatar", { method: "POST", body: { avatar } }),
-
 
     setRoomAvatar: (roomId: string, avatar: string) =>
         request<Room>(`/api/v1/chat/rooms/${roomId}/avatar`, { method: "POST", body: { avatar } }),
 
     getProfile: (userId: string) =>
         request<Profile>(`/api/v1/chat/profile/${userId}`),
-
-
 }
 
 export type ApiClient = typeof apiClient

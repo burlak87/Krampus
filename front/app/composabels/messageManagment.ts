@@ -6,7 +6,6 @@ export class messageManagment {
 
     }
 
-
     async createNewMessage(messageData: string, idRoom: string) {
         return apiClient.sendMessage({
             room_id: idRoom,
@@ -14,7 +13,6 @@ export class messageManagment {
             payload: { text: messageData },
         })
     }
-
 
     async deleteMessage(idMessage: string, idRoom: string) {
         void idMessage
@@ -27,7 +25,6 @@ export class messageManagment {
         void idRoom
     }
 
-
     async requestAllMessageGroupChat(idRoom: string, limit?: number): Promise<BaseMessage[]> {
         try {
             return await apiClient.getRoomMessages(idRoom, limit)
@@ -36,7 +33,6 @@ export class messageManagment {
         }
     }
 
-
     async getUserChatMessage(idRoom: string, limit?: number): Promise<BaseMessage[]> {
         try {
             return await apiClient.getRoomMessages(idRoom, limit)
@@ -44,7 +40,6 @@ export class messageManagment {
             return []
         }
     }
-
 
     async searchMessages(idRoom: string, query: string, limit?: number): Promise<SearchResult[]> {
         try {

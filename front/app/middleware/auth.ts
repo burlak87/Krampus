@@ -7,7 +7,6 @@ export default defineNuxtRouteMiddleware(async () => {
     const userStore = useUserStore()
     const auth = new Auth()
 
-   
     if (userStore.userData == undefined) {
         await auth.restoreSession()
     }

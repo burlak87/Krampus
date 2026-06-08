@@ -13,7 +13,6 @@ export class GroupManagment {
         return true
     }
 
-
     async createGroup(nameGroup: String): Promise<Room | null> {
         const payload = {
             id: crypto.randomUUID(),
@@ -30,7 +29,6 @@ export class GroupManagment {
             return null
         }
     }
-
 
     async createPersonal(userId: string, name: string): Promise<Room | null> {
         const payload: any = {
@@ -50,7 +48,6 @@ export class GroupManagment {
         }
     }
 
-
     async createChat(nameChat: string, typeChat: string, _idFolder: string, _idRoom: string, members: string[] = []): Promise<Room | null> {
         const type: RoomType = (["personal", "private", "group", "video_call"] as const)
             .includes(typeChat as RoomType) ? (typeChat as RoomType) : "private"
@@ -63,14 +60,12 @@ export class GroupManagment {
         }
     }
 
-
     createFolder(_nameFolder: string, _idRoom: string) {}
     createRole(_nameRole: string, _setting: object, _idRoom: string) {}
     settingGroup() {}
     deleteUserInGroup(_idGroup: string, _idUser: string) {}
     requreAllRole(_idGroup: string) {}
     deleteRoleInGroup(_idGroup: string, _idRole: string) {}
-
 
     async requreAllUser(): Promise<ApiUser[]> {
         try {
@@ -80,7 +75,6 @@ export class GroupManagment {
         }
     }
 
-
     async openGroup(idGroup: string): Promise<Room | null> {
         try {
             return await apiClient.getRoom(idGroup)
@@ -88,7 +82,6 @@ export class GroupManagment {
             return null
         }
     }
-
 
     async requestGroup(): Promise<Room[]> {
         try {
@@ -98,7 +91,6 @@ export class GroupManagment {
         }
     }
 
-
     async addNewUser(idGroup: string, _userEmail: string): Promise<Room | null> {
         try {
             const res = await apiClient.joinRoom({ token: idGroup })
@@ -107,7 +99,6 @@ export class GroupManagment {
             return null
         }
     }
-
 
     async requreAllMessageGroup(idGroup: string) {
         try {

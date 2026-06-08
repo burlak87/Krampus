@@ -55,13 +55,11 @@ func NewMessageDistributor(cfg config.KafkaConfig, logger logging.Logger) *Messa
 	return d
 }
 
-// BroadcastToRoom — отправка в конкретную комнату (реализация идентична Broadcast, но с подменой темы если нужно)
 func (d *MessageDistributor) BroadcastToRoom(ctx context.Context, msg *domain.BaseMessage, roomID string) error {
 	msg.RoomID = types.RoomIDFromString(roomID)
 	return d.Broadcast(ctx, msg)
 }
 
-// SendToUserClient — отправка персонального сообщения (например, в топик уведомлений)
 func (d *MessageDistributor) SendToUserClient(ctx context.Context, userID string, msg *domain.BaseMessage) error {
 	msg.UserID = types.UserIDFromString(userID)
 	return d.Broadcast(ctx, msg)

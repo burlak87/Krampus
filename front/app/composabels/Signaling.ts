@@ -54,7 +54,6 @@ export class Signaling {
             newAnswer.answer = answer
         }
         newAnswer.action = action
-        //newAnswer.stream_option = streamOption.system_option
         newAnswer.status = statusMessage
         console.log(newAnswer)
         return JSON.stringify(newAnswer)
@@ -66,12 +65,6 @@ export class Signaling {
         newStatus.name = this.#user.userData?.userName
         newStatus.idUserTarget = this.#user.userData?.id
         newStatus.idRoom = this.#idRoom
-
-        /*switch (Role) {
-            case "Top":
-                newStatus.Priority = 0.5
-                break
-        }*/
 
         newStatus.system_option = this.#callStore.settingCall
 

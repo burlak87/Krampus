@@ -34,7 +34,6 @@ async function onRoomAvatarPick(e: Event) {
     }
 }
 
-
 async function loadMembers() {
     const room = props.RoomData
     if (!room?.id) {
@@ -54,7 +53,6 @@ async function loadMembers() {
     const byId: Record<string, any> = {}
     for (const u of all) byId[String(u.id)] = u
     members.value = ids.map((id: string) => byId[String(id)] ?? { id, username: String(id) })
-
     roomAvatar.value = room.avatar ?? ''
     if (!roomAvatar.value) {
         const full = await groupClass.openGroup(String(room.id))

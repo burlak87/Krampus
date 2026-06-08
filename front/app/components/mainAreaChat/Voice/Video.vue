@@ -4,7 +4,6 @@ import type { genericRef } from '~~/types/other';
 const videoRef = useTemplateRef('videoRef')
 const userId = defineProps(['userId'])
 const call = callStore()
-//const videoRef = ref<HTMLVideoElement | null>(null)
 let currentStream: MediaStream | null = null
 
 let muthAtribute = ref()

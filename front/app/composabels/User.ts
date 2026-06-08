@@ -7,7 +7,6 @@ export class User {
 
     }
 
-
     async getUserById(idUser: string): Promise<ApiUser | null> {
         try {
             return await apiClient.getUser(idUser)
@@ -15,7 +14,6 @@ export class User {
             return null
         }
     }
-
 
     async getAllUser(limit?: number, offset?: number): Promise<ApiUser[]> {
         try {

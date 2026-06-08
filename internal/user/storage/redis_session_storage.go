@@ -134,5 +134,4 @@ func (r *RedisSessionStorage) ValidateSession(ctx context.Context, sessionID typ
 }
 
 func (s *RedisSessionStorage) RedisSessionStorage() {
-	// marker method for interface compliance
 }

@@ -4,24 +4,18 @@
     let emailUser = ref(),
         passwordUser = ref(),
         loginUser = ref()
-    const isThemeDefault = ref(true)
     const settingUser = useSettingUser()
 
     async function register() {
         const auth = new Auth()
 
-        // Send only the three required fields: login (username), email, password.
+
         const res = await auth.register(loginUser.value, emailUser.value, passwordUser.value)
         if (res.sucess) {
             navigateTo('auth')
         } else {
             console.error(res.error)
         }
-    }
-
-    function restructurTheme() {
-        console.log(111)
-        isThemeDefault.value = !isThemeDefault.value
     }
 </script>
 

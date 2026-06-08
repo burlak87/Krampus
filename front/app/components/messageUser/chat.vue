@@ -21,7 +21,7 @@ const isActiveUser = computed(() => {
         :class='{ "w-full relative flex justify-end": isActiveUser, "w-full relative h-fit": !isActiveUser }'>
         <section
             :class='{ "w-fit flex p-4 rounded-xl bg-body-900 flex-row-reverse gap-5 relative box-border": isActiveUser, "w-fit p-4 rounded-xl relative  bg-body-900 flex flex-row gap-5  box-border ": !isActiveUser, "ring-2 ring-yellow-400": highlight }'>
-            <p class=" text-[20px] max-w-100 text-white break-all">{{ userMessage.data }}</p>
+            <p class=" text-[20px] max-w-100 min-w-40 text-white break-all">{{ userMessage.data }}</p>
             <article class="absolute w-full top-0 right-0 h-full">
                 <p
                     :class="{ 'text-[16px] text-white/60 bg-body-100 py-0.5 px-5 rounded-full absolute bottom-[-20px]': true, 'left-0': !isActiveUser, 'right-0': isActiveUser }">

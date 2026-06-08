@@ -7,7 +7,7 @@ export class User {
 
     }
 
-    // GET /api/v1/chat/users/{user_id}
+
     async getUserById(idUser: string): Promise<ApiUser | null> {
         try {
             return await apiClient.getUser(idUser)
@@ -16,7 +16,7 @@ export class User {
         }
     }
 
-    // GET /api/v1/chat/users
+
     async getAllUser(limit?: number, offset?: number): Promise<ApiUser[]> {
         try {
             return await apiClient.listUsers(limit, offset)

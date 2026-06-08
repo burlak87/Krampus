@@ -27,8 +27,8 @@ const isActiveUser = computed(() => {
                     userMessage.time }}</p>
             </section>
             <section
-                :class='{ "flex max-w-100 relative mt-10 items-center bg-body-900 box-border break-all h-fit p-3 rounded-xl": true, "ring-2 ring-yellow-400": highlight }'>
-                <p class="rounded-full absolute -top-5 left-0 py-0.5 px-3 bg-body-100 text-[18px] text-white">{{
+                :class='{ "flex max-w-100 min-w-40 relative mt-10 items-center bg-body-900 box-border break-all h-fit p-3 rounded-xl": true, "ring-2 ring-yellow-400": highlight }'>
+                <p class="rounded-full absolute min-w-fit -top-5 left-0 py-0.5 px-3 bg-body-100 text-[18px] text-white">{{
                     userMessage.name }}:</p>
                 <p class=" text-[20px] text-white break-all">{{ userMessage.data }}</p>
                 <section v-if="isHover"

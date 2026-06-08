@@ -1,16 +1,5 @@
-export interface User {
-    id: string,
-    name: string,
-    secondName: string,
-    userName: string,
-    phone: string,
-    birthday: string,
-    country: string,
-    bio: string,
-    logo: string,
-    email: string,
-    password: string
-}
+import type { User } from "./api/respons";
+
 
 export interface CallParticipant extends User {
     audio: boolean;

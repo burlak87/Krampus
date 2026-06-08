@@ -12,8 +12,7 @@ class Auth {
         this.#userStore = useUserStore()
     }
 
-    // Registration sends ONLY the three required fields (username, email,
-    // password); firstname/lastname are optional on the backend and omitted.
+
     async register(username: string, email: string, password: string): Promise<AuthRespons> {
         try {
             await apiClient.signup({ username, email, password })
@@ -76,8 +75,7 @@ class Auth {
         }
     }
 
-    // Decodes the user_id from the access-token JWT, fetches the user and puts
-    // it into the store (the API has no dedicated "me" endpoint).
+
     async #loadCurrentUser(accessToken: string) {
         const userId = this.#userIdFromToken(accessToken)
         if (!userId) return
@@ -98,7 +96,7 @@ class Auth {
             }
             this.#userStore.userData = mapped
         } catch {
-            // keep tokens even if profile fetch fails
+          
         }
     }
 
@@ -113,8 +111,7 @@ class Auth {
         }
     }
 
-    // Restores the session after a page reload: the Pinia store resets but the
-    // access token survives in localStorage, so re-load the user from it.
+
     async restoreSession(): Promise<boolean> {
         if (this.#userStore.userData != undefined) return true
         if (typeof localStorage === "undefined") return false
@@ -124,7 +121,7 @@ class Auth {
         return this.#userStore.userData != undefined
     }
 
-    // Completes a 2FA login using the temp token returned by signin.
+
     async verifyTwoFA(tempToken: string, code: string): Promise<AuthRespons> {
         try {
             const tokens = await apiClient.verify({ temp_token: tempToken, code })
@@ -141,7 +138,7 @@ class Auth {
         try {
             await apiClient.logout(password)
         } catch {
-            // even if the call fails, drop local credentials
+
         }
         clearTokens()
         this.#userStore.userData = undefined

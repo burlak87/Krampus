@@ -1,5 +1,3 @@
-// Response bodies — mirror components.schemas of docs/openapi.yaml.
-
 export interface AuthRespons {
     sucess: boolean,
     data?: object | string,

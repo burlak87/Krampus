@@ -6,7 +6,7 @@ export class messageManagment {
 
     }
 
-    // POST /api/v1/chat/messages
+
     async createNewMessage(messageData: string, idRoom: string) {
         return apiClient.sendMessage({
             room_id: idRoom,
@@ -15,8 +15,7 @@ export class messageManagment {
         })
     }
 
-    // The OpenAPI spec exposes no REST delete/edit message operations; these are
-    // realtime-only frames over /ws. Left as no-ops on the REST integration layer.
+
     async deleteMessage(idMessage: string, idRoom: string) {
         void idMessage
         void idRoom
@@ -28,7 +27,7 @@ export class messageManagment {
         void idRoom
     }
 
-    // GET /api/v1/chat/rooms/{room_id}/messages
+
     async requestAllMessageGroupChat(idRoom: string, limit?: number): Promise<BaseMessage[]> {
         try {
             return await apiClient.getRoomMessages(idRoom, limit)
@@ -37,7 +36,7 @@ export class messageManagment {
         }
     }
 
-    // GET /api/v1/chat/rooms/{room_id}/messages — messages are addressed by room.
+
     async getUserChatMessage(idRoom: string, limit?: number): Promise<BaseMessage[]> {
         try {
             return await apiClient.getRoomMessages(idRoom, limit)
@@ -46,7 +45,7 @@ export class messageManagment {
         }
     }
 
-    // GET /api/v1/chat/rooms/{room_id}/search
+
     async searchMessages(idRoom: string, query: string, limit?: number): Promise<SearchResult[]> {
         try {
             return await apiClient.searchMessages(idRoom, query, limit)

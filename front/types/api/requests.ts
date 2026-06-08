@@ -1,5 +1,3 @@
-// Request bodies — mirror components.schemas / requestBody of docs/openapi.yaml.
-
 export interface SignupRequest {
     username: string
     firstname?: string

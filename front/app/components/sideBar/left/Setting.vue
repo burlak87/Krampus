@@ -562,8 +562,6 @@ onUpdated(() => {
                 </section>
             </article>
         </section>
-
-        <!-- Logout -->
         <section class="flex flex-col gap-4 bg-body-100 px-7 py-4 rounded-xl">
             <article class="flex flex-row gap-5 items-center">
                 <svg width="34" height="34" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -572,9 +570,6 @@ onUpdated(() => {
                 </svg>
                 <p class="text-[20px] text-red-500 font-bold">{{settingUser.language == 'Englend' ? 'Logout' : 'Выйти'}}</p>
             </article>
-            <input type="password" v-model="logoutPassword"
-                :placeholder="settingUser.language == 'Englend' ? 'Password' : 'Пароль'"
-                class="w-full px-5 py-2 text-white text-[18px] bg-body-900 rounded-full placeholder:text-white/40 focus:outline-none">
             <button type="button" @click.stop="logout"
                 class="border-1 border-red-500 text-red-500 hover:bg-red-500/10 px-5 py-2 text-[18px] rounded-full">
                 {{settingUser.language == 'Englend' ? 'Logout' : 'Выйти'}}

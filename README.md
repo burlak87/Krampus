@@ -23,7 +23,7 @@ Krampus — это полнофункциональный мессенджер �
 ---
 
 ## 📸 Видео работы платформы
-![Видео](https://drive.google.com/file/d/1GBzVKRWlHYCv3ikKM2_Ovi0QGcgWwaBy/view?usp=sharing)
+![Видео](https://img.freepik.com/premium-photo/numerator-icon-clapperboard-3d-render-illustration_658737-7.jpg?semt=ais_hybrid&w=740)(https://drive.google.com/file/d/1GBzVKRWlHYCv3ikKM2_Ovi0QGcgWwaBy/view?usp=sharing)
 
 ---
 

@@ -4,7 +4,6 @@
     const router = useRouter()
     let emailUser = ref()
     let passwordUser = ref()
-    const isThemeDefault = ref(true)
     const settingUser = useSettingUser()
 
     const authError = ref("")
@@ -22,11 +21,6 @@
             authError.value = res.error ?? "Ошибка входа"
             console.error(res.error)
         }
-    }
-
-    function restructurTheme() {
-
-        isThemeDefault.value = !isThemeDefault.value
     }
 </script>
 

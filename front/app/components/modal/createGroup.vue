@@ -1,6 +1,5 @@
 <script setup lang="ts">
     const nameGroup = ref()
-    const namePersonal = ref()
     const settingUser = useSettingUser()
 </script>
 
@@ -12,17 +11,7 @@
             </section>
             <form class="flex flex-col gap-8 justify-center items-center">
                 <input v-model="nameGroup" class="border-1 text-white border-white bg-inherit hover:bg-white/10 px-10 py-3 text-[20px] placeholder:text-white/30" :placeholder="settingUser.language == 'Englend' ? 'Name' : 'Название'"></input>
-                <button type="button" @click.stop.prevent="$emit('createGroup', nameGroup)" class="border-1 text-white/50 hover:text-white px-5 py-2 text-[20px]  border-white w-1/2 ">{{settingUser.language == 'Englend' ? 'Create' : 'Создать'}}</button>
-            </form>
-
-            <div class="w-full border-t border-white/20"></div>
-
-            <section class="text-center w-full">
-                <h1 class="text-[28px] text-white font-bold">{{settingUser.language == 'Englend' ? 'Create personal chat' : 'Создать личный чат'}}</h1>
-            </section>
-            <form class="flex flex-col gap-8 justify-center items-center">
-                <input v-model="namePersonal" class="border-1 text-white border-white bg-inherit hover:bg-white/10 px-10 py-3 text-[20px] placeholder:text-white/30" :placeholder="settingUser.language == 'Englend' ? 'Name' : 'Название'"></input>
-                <button type="button" @click.stop.prevent="$emit('createPersonal', namePersonal)" class="border-1 text-white/50 hover:text-white px-5 py-2 text-[20px]  border-white w-1/2 ">{{settingUser.language == 'Englend' ? 'Create' : 'Создать'}}</button>
+                <button type="button" @click.prevent="$emit('createGroup', nameGroup)" class="border-1 text-white/50 hover:text-white px-5 py-2 text-[20px]  border-white w-1/2 ">{{settingUser.language == 'Englend' ? 'Create' : 'Создать'}}</button>
             </form>
         </article>
     </section>

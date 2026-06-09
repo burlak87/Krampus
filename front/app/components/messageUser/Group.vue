@@ -5,6 +5,7 @@ const userMessage = props.messageData
 const userStore = useUserStore()
 const isHover = ref(false)
 
+
 const isActiveUser = computed(() => {
     const me = userStore.userData
     if (userMessage?.userId != null && me?.id != null) {

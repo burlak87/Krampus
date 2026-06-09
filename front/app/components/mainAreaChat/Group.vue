@@ -5,6 +5,7 @@ import type { genericRef } from '~~/types/other'
 import type { BaseMessage } from '~~/types/api/respons'
 
 const props = defineProps(["Room"])
+
 const roomId = computed<string>(() => (props.Room?.[1]?.id ?? '') as string)
 
 const rightSideBarType = ref('')
@@ -78,6 +79,7 @@ const funcMessage = async () => {
 
 const activeSearch = ref(false)
 const searchData = ref("")
+
 
 const matchedIds = computed<Set<string>>(() => {
     const q = (searchData.value || '').trim().toLowerCase()

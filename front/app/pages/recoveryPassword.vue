@@ -3,7 +3,6 @@
 
     let emailUser = ref()
     let passwordUser = ref()
-    const isThemeDefault = ref(true)
     const settingUser = useSettingUser()
 
     function dropPassword() {

@@ -43,7 +43,7 @@ func removeClient(c *Client) {
 	close(c.send)
 }
 
-// Количество call-клиентов в комнате (исключая опционально переданного)
+
 func callCount(room string, exclude *Client) int {
 	clients := rooms[room]
 	if clients == nil {
@@ -58,7 +58,6 @@ func callCount(room string, exclude *Client) int {
 	return count
 }
 
-// Рассылка всем клиентам в комнате, кроме отправителя
 func broadcast(room string, data []byte, sender *Client) {
 	for c := range rooms[room] {
 		if c != sender {
@@ -89,7 +88,7 @@ func wsHandler(c *gin.Context) {
 		isCall: isCall,
 	}
 
-	// Для call: сначала ответить количеством уже подключённых (без себя)
+
 	if isCall {
 		_, msg, err := conn.ReadMessage()
 		if err != nil {
@@ -107,12 +106,12 @@ func wsHandler(c *gin.Context) {
 		}
 	}
 
-	// Теперь добавляем клиента
+
 	addClient(client)
 	fmt.Printf("%s в комнате %s (call=%v). Всего call: %d\n",
 		client.id, room, isCall, callCount(room, nil))
 
-	// Запуск чтения и записи
+
 	go readPump(client)
 	go writePump(client)
 }

@@ -9,6 +9,7 @@ const activeSearch = ref(false)
 const editMessageStatus = ref(false)
 const rightSideBarType = ref('')
 
+
 const matchedIds = computed<Set<string>>(() => {
     const q = (searchData.value || '').trim().toLowerCase()
     if (!q) return new Set()
@@ -21,10 +22,12 @@ const messageClass = new messageManagment()
 const userClass = new UserComposable()
 const user = useUserStore()
 const props = defineProps(["Room"])
+
 const roomId = computed<string>(() => (props.Room?.[1]?.id ?? '') as string)
 
 const messageUser = ref<any[]>([])
 const userMap = ref<Record<string, string>>({})
+
 
 async function ensureUsers() {
     if (Object.keys(userMap.value).length) return
@@ -58,6 +61,7 @@ watch(roomId, () => {
     messageUser.value = []
     loadMessages()
 })
+
 
 let pollTimer: ReturnType<typeof setInterval> | undefined
 onMounted(() => { pollTimer = setInterval(loadMessages, 4000) })

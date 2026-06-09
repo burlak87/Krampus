@@ -13,16 +13,12 @@ watch(activeChat, (newVal, oldVal) => {
     console.log(activeChat.value)
     const chat = (activeChat.value as {0:String, 1: object})
     switch(chat[0]) {
-        case "chat":
-        case "group":
         case "private":
             typeAreaChat.value = "Group"
             break
-        case "voice":
         case "video_call":
             typeAreaChat.value = "Voice"
             break
-        case "user":
         case "personal":
             typeAreaChat.value = "User"
             break

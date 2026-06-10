@@ -75,10 +75,6 @@ Krampus — это полнофункциональный мессенджер �
 
 ---
 
-## 📸 Видео работы платформы
-![Видео](https://drive.google.com/file/d/1GBzVKRWlHYCv3ikKM2_Ovi0QGcgWwaBy/view?usp=sharing)
-
-
 ## 👥 Роли пользователей
 
 | Роль | Возможности |
